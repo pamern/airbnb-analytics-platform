@@ -1,0 +1,141 @@
+airbnb-analytics-platform/
+│
+├── docker-compose.yml
+├── Dockerfile
+├── pyproject.toml
+├── uv.lock
+├── README.md
+├── .env.example
+├── .gitignore
+│
+├── .github/
+│   └── workflows/
+│       ├── dbt_ci.yml
+│       └── streamlit_deploy.yml
+│
+├── data/
+│   ├── raw/
+│   ├── sample/
+│   └── external/
+│
+├── ingestion/
+│   ├── load_to_minio.py
+│   ├── load_to_motherduck.py
+│   └── validate_raw_data.py
+│
+├── dbt/
+│   ├── dbt_project.yml
+│   ├── profiles.yml.example
+│   ├── packages.yml
+│   │
+│   ├── models/
+│   │   ├── bronze/
+│   │   │   ├── sources.yml
+│   │   │   ├── bronze_listings.sql
+│   │   │   ├── bronze_reviews.sql
+│   │   │   └── bronze_calendar.sql
+│   │   │
+│   │   ├── silver/
+│   │   │   ├── silver_listings_cleaned.sql
+│   │   │   ├── silver_hosts.sql
+│   │   │   ├── silver_locations.sql
+│   │   │   ├── silver_reviews.sql
+│   │   │   └── silver_calendar.sql
+│   │   │
+│   │   └── gold/
+│   │       ├── dim_host.sql
+│   │       ├── dim_location.sql
+│   │       ├── dim_property.sql
+│   │       ├── dim_date.sql
+│   │       ├── fact_listing_performance.sql
+│   │       ├── mart_market_summary.sql
+│   │       └── mart_ml_features.sql
+│   │
+│   ├── seeds/
+│   │   └── city_mapping.csv
+│   │
+│   ├── macros/
+│   │   └── generate_surrogate_key.sql
+│   │
+│   ├── snapshots/
+│   │   └── listing_price_snapshot.sql
+│   │
+│   └── tests/
+│       ├── assert_positive_price.sql
+│       └── assert_valid_availability.sql
+│
+├── ml/
+│   ├── build_features.py
+│   ├── train_model.py
+│   ├── evaluate_model.py
+│   ├── predict.py
+│   └── outputs/
+│       ├── model.pkl
+│       ├── metrics.json
+│       ├── feature_importance.csv
+│       └── predictions.csv
+│
+├── llm/
+│   ├── insight_generator.py
+│   ├── explain_prediction.py
+│   ├── prompt_templates.py
+│   └── outputs/
+│       └── generated_insights.md
+│
+├── app/
+│   ├── streamlit_dashboard.py
+│   ├── pages/
+│   │   ├── 1_Overview.py
+│   │   ├── 2_Market_Analysis.py
+│   │   ├── 3_ML_Prediction.py
+│   │   └── 4_LLM_Insights.py
+│   │
+│   └── components/
+│       ├── charts.py
+│       ├── filters.py
+│       ├── kpis.py
+│       └── layout.py
+│
+├── airflow/
+│   ├── dags/
+│   │   └── airbnb_pipeline.py
+│   ├── logs/
+│   │   └── .gitkeep
+│   └── plugins/
+│       └── .gitkeep
+│
+├── configs/
+│   ├── paths.py
+│   ├── settings.py
+│   └── logging.py
+│
+├── utils/
+│   ├── motherduck.py
+│   ├── minio_client.py
+│   ├── io.py
+│   ├── logger.py
+│   └── sql.py
+│
+├── notebooks/
+│   ├── 01_eda.ipynb
+│   ├── 02_ml_experiment.ipynb
+│   └── 03_llm_experiment.ipynb
+│
+├── scripts/
+│   ├── run_ingestion.sh
+│   ├── run_dbt.sh
+│   ├── run_ml.sh
+│   ├── run_llm.sh
+│   └── run_app.sh
+│
+├── reports/
+│   ├── figures/
+│   ├── tables/
+│   └── final_report.md
+│
+└── docs/
+    ├── architecture.md
+    ├── data_dictionary.md
+    ├── dimensional_model.md
+    ├── ml_methodology.md
+    └── llm_interpretation.md
