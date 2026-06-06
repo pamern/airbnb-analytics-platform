@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local secrets
+.env
+
+# Raw datasets can be large; keep only samples/docs in Git
+data/raw/
+
+# Local service data
+minio_data/
