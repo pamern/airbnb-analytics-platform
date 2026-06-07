@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: airbnb_bronze
+    description: Raw Airbnb tables loaded by ingestion/load_to_motherduck.py.
+    database: "{{ env_var('MOTHERDUCK_DATABASE', 'airbnb_analytics') }}"
+    schema: "{{ env_var('MOTHERDUCK_SCHEMA', 'bronze') }}"
+    tables:
+      - name: bronze_listings
+        description: Raw listing-level Airbnb data.
+      - name: bronze_calendar
+        description: Raw daily availability and price data by listing.
+      - name: bronze_reviews
+        description: Raw guest reviews by listing.
+      - name: bronze_neighbourhoods
+        description: Raw neighbourhood reference data.
