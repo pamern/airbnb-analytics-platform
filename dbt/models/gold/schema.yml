@@ -1,0 +1,276 @@
+version: 2
+
+models:
+  - name: dim_listing
+    description: Listing dimension, one row per Airbnb listing.
+    columns:
+      - name: listing_key
+        description: Surrogate key generated from listing_id.
+        tests:
+          - not_null
+          - unique
+      - name: listing_id
+        tests:
+          - not_null
+          - unique
+      - name: host_key
+        tests:
+          - not_null
+      - name: location_key
+        tests:
+          - not_null
+      - name: room_type
+        tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Entire home/apt
+                  - Private room
+                  - Shared room
+                  - Hotel room
+
+  - name: dim_host
+    description: Host dimension, one row per Airbnb host.
+    columns:
+      - name: host_key
+        tests:
+          - not_null
+          - unique
+      - name: host_id
+        tests:
+          - not_null
+          - unique
+      - name: observed_listing_count
+        tests:
+          - positive_or_null
+
+  - name: dim_location
+    description: Neighbourhood dimension, one row per Bangkok neighbourhood.
+    columns:
+      - name: location_key
+        tests:
+          - not_null
+          - unique
+      - name: neighbourhood
+        tests:
+          - not_null
+      - name: listing_count
+        tests:
+          - positive_or_null
+
+  - name: dim_date
+    description: Date dimension built from listing scrape, calendar, and review dates.
+    columns:
+      - name: date_key
+        tests:
+          - not_null
+          - unique
+      - name: date
+        tests:
+          - not_null
+          - unique
+
+  - name: fact_listing_snapshot
+    description: Current listing snapshot fact, one row per listing at the latest scrape retained in Silver.
+    columns:
+      - name: listing_key
+        tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_key
+      - name: host_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: date_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: price
+        tests:
+          - positive_or_null
+      - name: availability_365
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 365
+
+  - name: fact_calendar_daily
+    description: Daily calendar fact, one row per listing per calendar date.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - listing_key
+              - date_key
+    columns:
+      - name: listing_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_key
+      - name: location_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: price
+        tests:
+          - positive_or_null
+      - name: adjusted_price
+        tests:
+          - positive_or_null
+
+  - name: fact_review
+    description: Review transaction fact, one row per review.
+    columns:
+      - name: review_key
+        tests:
+          - not_null
+          - unique
+      - name: review_id
+        tests:
+          - not_null
+          - unique
+      - name: listing_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_key
+      - name: host_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: comment_length
+        tests:
+          - positive_or_null
+
+  - name: mart_neighbourhood_market
+    description: Dashboard mart aggregated by neighbourhood and room type.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - location_key
+              - room_type
+    columns:
+      - name: location_key
+        tests:
+          - not_null
+      - name: listing_count
+        tests:
+          - positive_or_null
+      - name: avg_price
+        tests:
+          - positive_or_null
+
+  - name: mart_host_performance
+    description: Dashboard mart aggregated by host.
+    columns:
+      - name: host_key
+        tests:
+          - not_null
+          - unique
+      - name: listing_count
+        tests:
+          - positive_or_null
+      - name: avg_price
+        tests:
+          - positive_or_null
+
+  - name: mart_competitor_benchmark
+    description: Top-N competitor mart, one row per listing and selected competitor.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - listing_id
+              - competitor_listing_id
+    columns:
+      - name: listing_id
+        tests:
+          - not_null
+      - name: competitor_listing_id
+        tests:
+          - not_null
+      - name: benchmark_rank
+        tests:
+          - not_null
+          - between_or_null:
+              arguments:
+                min_value: 1
+                max_value: 10
+      - name: distance_km
+        tests:
+          - positive_or_null
+
+  - name: mart_ml_price_features
+    description: ML training mart, one row per listing with target price and model features.
+    columns:
+      - name: listing_id
+        tests:
+          - not_null
+          - unique
+      - name: price
+        tests:
+          - not_null
+          - positive_or_null
+
+  - name: mart_llm_area_summary
+    description: LLM context mart aggregated by neighbourhood and room type.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - location_key
+              - room_type
+    columns:
+      - name: location_key
+        tests:
+          - not_null
+      - name: listing_count
+        tests:
+          - positive_or_null

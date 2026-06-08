@@ -12,9 +12,10 @@ if str(PROJECT_ROOT) not in sys.path:
 from duckdb import DuckDBPyConnection
 
 from configs.paths import RAW_CITY_DATA_DIR
+import os
 from configs.settings import MOTHERDUCK
 from utils.logger import get_logger
-from utils.motherduck import close_connection, connect_motherduck
+from utils.motherduck import close_connection, connect_motherduck, connect_duckdb
 from utils.sql import query_dataframe
 
 
@@ -77,8 +78,15 @@ def recreate_bronze_table(
 
 
 def load_raw_to_bronze(raw_dir: Path = RAW_CITY_DIR) -> None:
-    """Load các file raw Bangkok vào đúng schema bronze trên MotherDuck."""
-    connection = connect_motherduck()
+    """Load các file raw Bangkok vào đúng schema bronze trên MotherDuck hoặc DuckDB local."""
+    token = os.getenv("MOTHERDUCK_TOKEN", "")
+    if token.strip() != "":
+        LOGGER.info("Phat hien MOTHERDUCK_TOKEN, dang ket noi den MotherDuck...")
+        connection = connect_motherduck()
+    else:
+        local_path = os.getenv("DUCKDB_LOCAL_PATH", "airbnb_analytics.duckdb")
+        LOGGER.warning("Khong tim thay MOTHERDUCK_TOKEN, dang fallback ve DuckDB local tai: %s", local_path)
+        connection = connect_duckdb(local_path)
     try:
         create_schema(connection, MOTHERDUCK.schema)
 

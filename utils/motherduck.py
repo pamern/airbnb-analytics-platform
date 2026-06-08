@@ -15,7 +15,7 @@ def connect_motherduck(read_only: bool = False) -> DuckDBPyConnection:
     if missing:
         raise ValueError(f"Thiếu biến môi trường cho MotherDuck: {', '.join(missing)}")
 
-    connection_string = f"md:{MOTHERDUCK.database}?motherduck_token={MOTHERDUCK.token}"
+    connection_string = f"md:{MOTHERDUCK.database}"
     return duckdb.connect(connection_string, read_only=read_only)
 
 

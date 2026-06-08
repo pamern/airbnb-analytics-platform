@@ -3,7 +3,7 @@ airbnb_analytics_platform:
   outputs:
     dev:
       type: duckdb
-      path: "md:{{ env_var('MOTHERDUCK_DATABASE', 'airbnb_analytics') }}?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
+      path: "md:{{ env_var('MOTHERDUCK_DATABASE', 'airbnb_analytics') }}"
       schema: "{{ env_var('DBT_TARGET_SCHEMA', 'main') }}"
       threads: 4
 
