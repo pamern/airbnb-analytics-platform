@@ -1,0 +1,90 @@
+version: 2
+
+models:
+  - name: silver_listings
+    description: Cleaned listing-level data with normalized identifiers, dates, prices, booleans, and review metrics.
+    columns:
+      - name: listing_id
+        description: Unique Airbnb listing identifier.
+        tests:
+          - not_null
+          - unique
+      - name: host_id
+        description: Airbnb host identifier.
+        tests:
+          - not_null
+      - name: price
+        description: Listing price converted from currency text to numeric value.
+        tests:
+          - positive_or_null
+      - name: availability_365
+        description: Number of available days in the next 365 days.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 365
+      - name: room_type
+        description: Airbnb room type.
+        tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Entire home/apt
+                  - Private room
+                  - Shared room
+                  - Hotel room
+
+  - name: silver_neighbourhoods
+    description: Cleaned neighbourhood reference data matching the Bronze neighbourhoods source grain.
+    columns:
+      - name: neighbourhood
+        description: Neighbourhood name.
+        tests:
+          - not_null
+          - unique
+      - name: neighbourhood_group
+        description: Neighbourhood group name from the raw reference data.
+
+  - name: silver_calendar
+    description: Cleaned daily listing availability and price table.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - listing_id
+              - calendar_date
+    columns:
+      - name: listing_id
+        description: Airbnb listing identifier.
+        tests:
+          - not_null
+      - name: calendar_date
+        description: Calendar date.
+        tests:
+          - not_null
+      - name: price
+        description: Daily price converted from currency text to numeric value.
+        tests:
+          - positive_or_null
+      - name: adjusted_price
+        description: Adjusted daily price converted from currency text to numeric value.
+        tests:
+          - positive_or_null
+
+  - name: silver_reviews
+    description: Cleaned review table, one row per review.
+    columns:
+      - name: review_id
+        description: Unique review identifier.
+        tests:
+          - not_null
+          - unique
+      - name: listing_id
+        description: Airbnb listing identifier.
+        tests:
+          - not_null
+      - name: review_date
+        description: Date when the review was posted.
+        tests:
+          - not_null

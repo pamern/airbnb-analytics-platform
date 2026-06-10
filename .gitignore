@@ -17,3 +17,11 @@ data/raw/
 
 # Local service data
 minio_data/
+
+# dbt artifacts and local DuckDB files
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+*.duckdb
+*.duckdb.wal
