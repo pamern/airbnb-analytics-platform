@@ -17,6 +17,20 @@ models:
         description: Listing price converted from currency text to numeric value.
         tests:
           - positive_or_null
+      - name: host_response_rate
+        description: Host response rate converted to a 0-1 numeric value.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: host_acceptance_rate
+        description: Host acceptance rate converted to a 0-1 numeric value.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 1
       - name: availability_365
         description: Number of available days in the next 365 days.
         tests:
@@ -34,6 +48,31 @@ models:
                   - Private room
                   - Shared room
                   - Hotel room
+      - name: latitude
+        description: Listing latitude.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: -90
+                max_value: 90
+      - name: longitude
+        description: Listing longitude.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: -180
+                max_value: 180
+      - name: minimum_nights
+        description: Minimum nights allowed for the listing.
+        tests:
+          - positive_or_null
+          - less_than_or_equal_or_null:
+              arguments:
+                right_column_name: maximum_nights
+      - name: maximum_nights
+        description: Maximum nights allowed for the listing.
+        tests:
+          - positive_or_null
 
   - name: silver_neighbourhoods
     description: Cleaned neighbourhood reference data matching the Bronze neighbourhoods source grain.
@@ -47,7 +86,7 @@ models:
         description: Neighbourhood group name from the raw reference data.
 
   - name: silver_calendar
-    description: Cleaned daily listing availability and price table.
+    description: Cleaned daily listing availability and price table at one row per listing_id and calendar_date.
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -59,6 +98,10 @@ models:
         description: Airbnb listing identifier.
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_listings')
+                field: listing_id
       - name: calendar_date
         description: Calendar date.
         tests:
@@ -71,6 +114,14 @@ models:
         description: Adjusted daily price converted from currency text to numeric value.
         tests:
           - positive_or_null
+      - name: minimum_nights
+        description: Minimum number of nights a guest can book for the given date.
+        tests:
+          - less_than_or_equal_or_null:
+              arguments:
+                right_column_name: maximum_nights
+      - name: maximum_nights
+        description: Maximum number of nights a guest can book for the given date.
 
   - name: silver_reviews
     description: Cleaned review table, one row per review.
@@ -84,6 +135,10 @@ models:
         description: Airbnb listing identifier.
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_listings')
+                field: listing_id
       - name: review_date
         description: Date when the review was posted.
         tests:

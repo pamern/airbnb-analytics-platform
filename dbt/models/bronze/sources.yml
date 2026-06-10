@@ -8,9 +8,44 @@ sources:
     tables:
       - name: bronze_listings
         description: Raw listing-level Airbnb data.
+        columns:
+          - name: id
+            description: Raw Airbnb listing identifier.
+            tests:
+              - not_null
+              - unique
+          - name: host_id
+            description: Raw Airbnb host identifier.
+            tests:
+              - not_null
       - name: bronze_calendar
         description: Raw daily availability and price data by listing.
+        tests:
+          - unique_combination_of_columns:
+              arguments:
+                combination_of_columns:
+                  - listing_id
+                  - date
+        columns:
+          - name: listing_id
+            description: Raw Airbnb listing identifier for the calendar row.
+            tests:
+              - not_null
+          - name: date
+            description: Raw calendar date.
+            tests:
+              - not_null
       - name: bronze_reviews
         description: Raw guest reviews by listing.
+        columns:
+          - name: id
+            description: Raw Airbnb review identifier.
+            tests:
+              - not_null
+              - unique
+          - name: listing_id
+            description: Raw Airbnb listing identifier referenced by the review.
+            tests:
+              - not_null
       - name: bronze_neighbourhoods
         description: Raw neighbourhood reference data.

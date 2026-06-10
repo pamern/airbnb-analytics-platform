@@ -19,3 +19,11 @@ from {{ model }}
 group by {{ combination_of_columns | join(', ') }}
 having count(*) > 1
 {% endtest %}
+
+{% test less_than_or_equal_or_null(model, column_name, right_column_name) %}
+select *
+from {{ model }}
+where {{ column_name }} is not null
+  and {{ right_column_name }} is not null
+  and {{ column_name }} > {{ right_column_name }}
+{% endtest %}

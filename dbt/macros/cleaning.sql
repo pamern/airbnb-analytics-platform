@@ -24,7 +24,7 @@
     nullif(trim(cast({{ expression }} as varchar)), '')
 {%- endmacro %}
 
-{% macro source_column(relation, column_name, alias='src', default='NULL') -%}
+{% macro source_column(relation, column_name, alias='src', default=none) -%}
     {%- if execute -%}
         {%- set columns = adapter.get_columns_in_relation(relation) -%}
         {%- set ns = namespace(found_name=none) -%}
@@ -36,8 +36,12 @@
 
         {%- if ns.found_name is not none -%}
             {{ return(alias ~ "." ~ adapter.quote(ns.found_name)) }}
-        {%- else -%}
+        {%- elif default is not none -%}
             {{ return(default) }}
+        {%- else -%}
+            {{ exceptions.raise_compiler_error(
+                "Required source column '" ~ column_name ~ "' not found in relation " ~ relation
+            ) }}
         {%- endif -%}
     {%- else -%}
         {{ return(alias ~ "." ~ adapter.quote(column_name)) }}

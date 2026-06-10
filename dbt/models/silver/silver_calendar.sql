@@ -15,18 +15,16 @@ cleaned as (
         try_cast({{ source_column(calendar_source, 'minimum_nights') }} as integer) as minimum_nights,
         try_cast({{ source_column(calendar_source, 'maximum_nights') }} as integer) as maximum_nights
     from source_data as src
-),
-
-deduplicated as (
-    select *
-    from cleaned
-    where listing_id is not null
-      and calendar_date is not null
-    qualify row_number() over (
-        partition by listing_id, calendar_date
-        order by adjusted_price desc nulls last, price desc nulls last
-    ) = 1
 )
 
-select *
-from deduplicated
+select
+    listing_id,
+    calendar_date,
+    is_available,
+    price,
+    adjusted_price,
+    minimum_nights,
+    maximum_nights
+from cleaned
+where listing_id is not null
+  and calendar_date is not null
