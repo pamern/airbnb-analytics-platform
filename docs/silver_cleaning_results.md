@@ -1,66 +1,64 @@
 # Silver Layer Cleaning Results
 
-## Mục tiêu
+## Muc tieu
 
-Tầng Silver chuẩn hóa 4 bảng Bronze của Airbnb thành các bảng sạch hơn để dùng cho Gold, ML, LLM và Streamlit:
+Tang Silver chuan hoa 4 bang Bronze cua Airbnb thanh 4 bang sach hon, giu nguyen grain nguon va chua tach entity. Viec tach dimension/fact va aggregate KPI se thuc hien o tang Gold.
 
-- `bronze_listings` -> `silver_listings_cleaned`, `silver_hosts`, `silver_locations`
+- `bronze_listings` -> `silver_listings`
 - `bronze_calendar` -> `silver_calendar`
 - `bronze_reviews` -> `silver_reviews`
-- `bronze_neighbourhoods` -> `silver_locations`
+- `bronze_neighbourhoods` -> `silver_neighbourhoods`
 
-## Kết quả model Silver
+## Ket qua model Silver
 
-| Model | Grain | Nội dung clean chính |
+| Model | Grain | Noi dung clean chinh |
 | --- | --- | --- |
-| `silver_listings_cleaned` | 1 dòng / listing | Chuẩn hóa `listing_id`, `host_id`, giá tiền, phần trăm, boolean, ngày, tọa độ, review score; loại duplicate theo `listing_id`. |
-| `silver_hosts` | 1 dòng / host | Tách thông tin host từ listing sạch; gom số listing quan sát được cho từng host. |
-| `silver_locations` | 1 dòng / neighbourhood | Chuẩn hóa neighbourhood Bangkok, enrich listing count và tọa độ trung bình từ listings. |
-| `silver_calendar` | 1 dòng / listing / ngày | Chuẩn hóa ngày, availability boolean, giá tiền, minimum/maximum nights; loại duplicate theo `listing_id + calendar_date`. |
-| `silver_reviews` | 1 dòng / review | Chuẩn hóa `review_id`, `listing_id`, `review_date`, reviewer và comment; loại duplicate theo `review_id`. |
-| `silver_cleaning_audit` | 1 dòng / Silver model | Ghi lại `row_count`, `duplicate_key_count`, `null_key_count`, `invalid_metric_count`. |
+| `silver_listings` | 1 dong / listing | Chuan hoa `listing_id`, `host_id`, gia tien, phan tram, boolean, ngay, toa do, review score; loai duplicate theo `listing_id`. |
+| `silver_calendar` | 1 dong / listing / ngay | Chuan hoa ngay, availability boolean, gia tien, minimum/maximum nights; loai duplicate theo `listing_id + calendar_date`. |
+| `silver_reviews` | 1 dong / review | Chuan hoa `review_id`, `listing_id`, `review_date`, reviewer va comment; loai duplicate theo `review_id`. |
+| `silver_neighbourhoods` | 1 dong / neighbourhood | Chuan hoa ten neighbourhood va neighbourhood group; loai duplicate theo `neighbourhood`. |
 
-## Quy tắc clean đã áp dụng
+## Quy tac clean da ap dung
 
-- Currency text như `$1,234.00` được chuyển thành số bằng macro `clean_money`.
-- Percent text như `95%` được chuyển thành tỷ lệ decimal bằng macro `clean_percent`, ví dụ `0.95`.
-- Boolean dạng `t/f`, `true/false`, `1/0`, `yes/no` được chuẩn hóa thành boolean.
-- Date text được ép kiểu về `date`.
-- ID chính được ép kiểu numeric khi phù hợp.
-- Các bảng chính được deduplicate theo grain của bảng.
-- Silver không aggregate KPI lớn; phần đó dành cho Gold.
+- Currency text nhu `$1,234.00` duoc chuyen thanh so bang macro `clean_money`.
+- Percent text nhu `95%` duoc chuyen thanh ty le decimal bang macro `clean_percent`, vi du `0.95`.
+- Boolean dang `t/f`, `true/false`, `1/0`, `yes/no` duoc chuan hoa thanh boolean.
+- Date text duoc ep kieu ve `date`.
+- ID chinh duoc ep kieu numeric khi phu hop.
+- Cac bang duoc deduplicate theo grain cua tung bang.
+- Silver khong aggregate KPI lon va khong tach host/location dimension; phan do danh cho Gold.
 
-## Cách chạy
+## Cach chay
 
-```bash
-uv run dbt build --project-dir dbt --profiles-dir dbt --target dev
-```
-
-Chạy local DuckDB thay vì MotherDuck:
+Chay Silver len MotherDuck:
 
 ```bash
-uv run dbt build --project-dir dbt --profiles-dir dbt --target local
+dbt build --project-dir dbt --profiles-dir dbt --select silver
 ```
 
-## Cách xem kết quả sau khi clean
+Neu dung `uv`:
 
-Sau khi `dbt build` thành công, kiểm tra audit:
+```bash
+uv run dbt build --project-dir dbt --profiles-dir dbt --select silver
+```
+
+Chay local DuckDB thay vi MotherDuck:
+
+```bash
+dbt build --project-dir dbt --profiles-dir dbt --target local --select silver
+```
+
+## Cach kiem tra ket qua
+
+Sau khi `dbt build` thanh cong, kiem tra danh sach bang Silver:
 
 ```sql
-select *
-from silver.silver_cleaning_audit
-order by model_name;
+show tables from silver;
 ```
 
-Các cột audit:
+Ky vong Silver chi co 4 bang:
 
-- `row_count`: số dòng sau khi clean.
-- `duplicate_key_count`: số dòng duplicate còn lại theo khóa chính/grain.
-- `null_key_count`: số dòng thiếu khóa chính.
-- `invalid_metric_count`: số giá trị metric bất thường đang được kiểm tra, ví dụ price âm.
-
-Kỳ vọng sau clean:
-
-- `duplicate_key_count = 0` cho các bảng Silver chính.
-- `null_key_count = 0` cho các khóa bắt buộc.
-- `invalid_metric_count = 0` với các metric đã kiểm tra.
+- `silver_listings`
+- `silver_calendar`
+- `silver_reviews`
+- `silver_neighbourhoods`

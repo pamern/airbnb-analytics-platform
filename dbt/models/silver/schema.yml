@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: silver_listings_cleaned
+  - name: silver_listings
     description: Cleaned listing-level data with normalized identifiers, dates, prices, booleans, and review metrics.
     columns:
       - name: listing_id
@@ -35,35 +35,16 @@ models:
                   - Shared room
                   - Hotel room
 
-  - name: silver_hosts
-    description: Cleaned host-level table derived from listings, one row per host.
+  - name: silver_neighbourhoods
+    description: Cleaned neighbourhood reference data matching the Bronze neighbourhoods source grain.
     columns:
-      - name: host_id
-        description: Unique Airbnb host identifier.
-        tests:
-          - not_null
-          - unique
-      - name: observed_listing_count
-        description: Number of listings observed for the host in the cleaned listing source.
-        tests:
-          - positive_or_null
-
-  - name: silver_locations
-    description: Cleaned Bangkok neighbourhood reference enriched with observed listing counts and average coordinates.
-    columns:
-      - name: location_key
-        description: Stable hash key for a neighbourhood.
-        tests:
-          - not_null
-          - unique
       - name: neighbourhood
         description: Neighbourhood name.
         tests:
           - not_null
-      - name: listing_count
-        description: Number of cleaned listings observed in this neighbourhood.
-        tests:
-          - positive_or_null
+          - unique
+      - name: neighbourhood_group
+        description: Neighbourhood group name from the raw reference data.
 
   - name: silver_calendar
     description: Cleaned daily listing availability and price table.
@@ -107,23 +88,3 @@ models:
         description: Date when the review was posted.
         tests:
           - not_null
-
-  - name: silver_cleaning_audit
-    description: Audit table recording row counts and basic cleaning quality checks for Silver models.
-    columns:
-      - name: model_name
-        tests:
-          - not_null
-          - unique
-      - name: row_count
-        tests:
-          - positive_or_null
-      - name: duplicate_key_count
-        tests:
-          - positive_or_null
-      - name: null_key_count
-        tests:
-          - positive_or_null
-      - name: invalid_metric_count
-        tests:
-          - positive_or_null
