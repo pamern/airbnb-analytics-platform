@@ -17,6 +17,9 @@ data/raw/
 
 # Local service data
 minio_data/
+warehouse/*
+!warehouse/postgres/
+!warehouse/pgadmin/
 warehouse/postgres/*
 warehouse/pgadmin/*
 !warehouse/postgres/.gitkeep
