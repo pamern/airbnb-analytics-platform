@@ -1,7 +1,11 @@
+{% set city_name = env_var('AIRBNB_CITY', 'Bangkok') %}
+
 with listing_snapshot as (
     select
         md5(cast(listing.listing_id as varchar) || '||' || cast(listing.last_scraped as varchar)) as listing_snapshot_key,
-        dim.listing_key,
+        listing_dim.listing_key,
+        host_dim.host_key,
+        location_dim.location_key,
         cast(strftime(listing.last_scraped, '%Y%m%d') as integer) as snapshot_date_key,
         case
             when listing.last_review is not null then cast(strftime(listing.last_review, '%Y%m%d') as integer)
@@ -26,8 +30,13 @@ with listing_snapshot as (
         listing.calculated_host_listings_count,
         1 as listing_count
     from {{ ref('silver_listings') }} as listing
-    inner join {{ ref('dim_listing') }} as dim
-        on listing.listing_id = dim.listing_id
+    inner join {{ ref('dim_listing') }} as listing_dim
+        on listing.listing_id = listing_dim.listing_id
+    inner join {{ ref('dim_host') }} as host_dim
+        on listing.host_id = host_dim.host_id
+    inner join {{ ref('dim_location') }} as location_dim
+        on location_dim.city = '{{ city_name }}'
+       and listing.neighbourhood = location_dim.neighbourhood
 )
 
 select *

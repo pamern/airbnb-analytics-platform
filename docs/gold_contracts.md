@@ -21,9 +21,6 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Grain: one row per `listing_id`.
 - Primary key: `listing_key`.
 - Natural key: `listing_id`.
-- Foreign keys:
-  - `host_key` -> `dim_host`
-  - `location_key` -> `dim_location`
 - Core attributes:
   - `listing_name`
   - `property_type`
@@ -58,7 +55,6 @@ The Gold layer follows a Kimball-style star schema for the current project scope
   - `host_total_listings_count`
 - Technical metadata:
   - `source_last_scraped_date`
-  - `dw_updated_at`
 - Modeling note:
   - this is a current-state SCD Type 1 dimension
   - new host attribute values overwrite prior ones in Gold v1
@@ -104,6 +100,8 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Primary key: `listing_snapshot_key`.
 - Foreign keys:
   - `listing_key` -> `dim_listing`
+  - `host_key` -> `dim_host`
+  - `location_key` -> `dim_location`
   - `snapshot_date_key` -> `dim_date`
   - `last_review_date_key` -> `dim_date` (nullable)
 - Degenerate identifiers:
@@ -137,18 +135,18 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Primary key: `availability_daily_key`.
 - Foreign keys:
   - `listing_key` -> `dim_listing`
+  - `host_key` -> `dim_host`
+  - `location_key` -> `dim_location`
   - `calendar_date_key` -> `dim_date`
 - Degenerate identifiers:
   - `listing_id`
 - Core measures and indicators:
   - `is_available`
-  - `calendar_price`
-  - `calendar_adjusted_price`
   - `calendar_minimum_nights`
   - `calendar_maximum_nights`
 - Modeling note:
-  - `calendar_price` and `calendar_adjusted_price` are preserved for traceability and daily analysis
-  - Gold v1 treats listing snapshot price as the primary pricing measure for listing-level pricing analytics
+  - Gold v1 does not expose daily calendar price fields because the current calendar pricing data is fully null
+  - listing-level pricing analytics should use the snapshot price in `fact_listing_current_snapshot`
 
 ### `fact_review`
 
@@ -157,6 +155,8 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Primary key: `review_key`.
 - Foreign keys:
   - `listing_key` -> `dim_listing`
+  - `host_key` -> `dim_host`
+  - `location_key` -> `dim_location`
   - `review_date_key` -> `dim_date`
 - Degenerate identifiers:
   - `review_id`
@@ -176,6 +176,11 @@ The Gold layer follows a Kimball-style star schema for the current project scope
   - `host_key`
   - `location_key`
   - `date_key`
+- Facts join directly to all conformed dimensions they need:
+  - `dim_listing`
+  - `dim_host`
+  - `dim_location`
+  - `dim_date`
 - Natural identifiers remain in facts for traceability, not as primary join keys.
 - If a source refresh breaks one of these assumptions:
   1. let Bronze or Silver tests fail

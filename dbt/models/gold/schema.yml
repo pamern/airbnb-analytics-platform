@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: dim_listing
-    description: Current-state listing dimension with descriptive listing attributes and foreign keys to host and location dimensions.
+    description: Current-state listing dimension with descriptive listing attributes only.
     columns:
       - name: listing_key
         description: Surrogate key for the listing dimension row.
@@ -14,22 +14,6 @@ models:
         tests:
           - not_null
           - unique
-      - name: host_key
-        description: Foreign key to dim_host.
-        tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('dim_host')
-                field: host_key
-      - name: location_key
-        description: Foreign key to dim_location.
-        tests:
-          - not_null
-          - relationships:
-              arguments:
-                to: ref('dim_location')
-                field: location_key
 
   - name: dim_host
     description: Current-state host dimension (SCD Type 1) with the latest observed host attributes from the source.
@@ -110,6 +94,22 @@ models:
               arguments:
                 to: ref('dim_listing')
                 field: listing_key
+      - name: host_key
+        description: Foreign key to dim_host.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        description: Foreign key to dim_location.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
       - name: snapshot_date_key
         description: Foreign key to dim_date representing the latest scrape date.
         tests:
@@ -160,6 +160,22 @@ models:
               arguments:
                 to: ref('dim_listing')
                 field: listing_key
+      - name: host_key
+        description: Foreign key to dim_host.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        description: Foreign key to dim_location.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
       - name: calendar_date_key
         description: Foreign key to dim_date.
         tests:
@@ -172,14 +188,6 @@ models:
         description: Degenerate natural identifier kept for traceability to Silver and source data.
         tests:
           - not_null
-      - name: calendar_price
-        description: Daily price from the calendar source.
-        tests:
-          - positive_or_null
-      - name: calendar_adjusted_price
-        description: Daily adjusted price from the calendar source.
-        tests:
-          - positive_or_null
 
   - name: fact_review
     description: Review event fact at one row per review.
@@ -197,6 +205,22 @@ models:
               arguments:
                 to: ref('dim_listing')
                 field: listing_key
+      - name: host_key
+        description: Foreign key to dim_host.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        description: Foreign key to dim_location.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
       - name: review_date_key
         description: Foreign key to dim_date.
         tests:
