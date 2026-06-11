@@ -17,6 +17,10 @@ data/raw/
 
 # Local service data
 minio_data/
+warehouse/postgres/*
+warehouse/pgadmin/*
+!warehouse/postgres/.gitkeep
+!warehouse/pgadmin/.gitkeep
 
 # dbt artifacts and local DuckDB files
 dbt/target/

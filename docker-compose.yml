@@ -1,4 +1,62 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: airbnb-postgres-local
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-airbnb_analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-airbnb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airbnb}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./warehouse/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-airbnb} -d ${POSTGRES_DB:-airbnb_analytics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: airbnb-pgadmin
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@local.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    volumes:
+      - ./warehouse/pgadmin:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbt
+    container_name: airbnb-dbt-local
+    working_dir: /workspace/dbt
+    environment:
+      DBT_PROFILES_DIR: /workspace/dbt
+      DBT_TARGET: ${DBT_TARGET:-local}
+      DBT_TARGET_SCHEMA: ${DBT_TARGET_SCHEMA:-public}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-airbnb_analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-airbnb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airbnb}
+      MOTHERDUCK_DATABASE: ${MOTHERDUCK_DATABASE:-airbnb_analytics}
+    volumes:
+      - ./:/workspace
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sleep", "infinity"]
+    restart: unless-stopped
+
   minio:
     image: minio/minio:latest
     container_name: airbnb-minio

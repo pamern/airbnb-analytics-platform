@@ -17,6 +17,16 @@ clean-targets:
 
 models:
   airbnb_analytics_platform:
+    bronze:
+      +materialized: table
+      +schema: bronze
     silver:
       +materialized: table
       +schema: silver
+    gold:
+      +materialized: table
+      +schema: gold
+
+seeds:
+  airbnb_analytics_platform:
+    +schema: bronze

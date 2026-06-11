@@ -1,14 +1,24 @@
 airbnb_analytics_platform:
-  target: dev
+  target: "{{ env_var('DBT_TARGET', 'local') }}"
   outputs:
-    dev:
+    local:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_PORT', 5432) | int }}"
+      user: "{{ env_var('POSTGRES_USER', 'airbnb') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', 'airbnb') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'airbnb_analytics') }}"
+      schema: "{{ env_var('DBT_TARGET_SCHEMA', 'public') }}"
+      threads: 4
+
+    production:
       type: duckdb
       path: "md:{{ env_var('MOTHERDUCK_DATABASE', 'airbnb_analytics') }}?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
       schema: "{{ env_var('DBT_TARGET_SCHEMA', 'main') }}"
       threads: 4
 
-    local:
+    dev:
       type: duckdb
-      path: "{{ env_var('DUCKDB_LOCAL_PATH', 'airbnb_analytics.duckdb') }}"
+      path: "md:{{ env_var('MOTHERDUCK_DATABASE', 'airbnb_analytics') }}?motherduck_token={{ env_var('MOTHERDUCK_TOKEN') }}"
       schema: "{{ env_var('DBT_TARGET_SCHEMA', 'main') }}"
       threads: 4
