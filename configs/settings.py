@@ -13,14 +13,6 @@ from configs.paths import ENV_FILE
 load_dotenv(dotenv_path=ENV_FILE, override=False)
 
 
-def _get_bool(name: str, default: bool) -> bool:
-    """Đọc biến boolean từ môi trường theo các giá trị thông dụng."""
-    value = getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
 def _get_int(name: str, default: int) -> int:
     """Đọc biến integer từ môi trường, nếu sai định dạng thì dùng default."""
     value = getenv(name)
@@ -50,17 +42,6 @@ class MotherDuckSettings:
 
 
 @dataclass(frozen=True)
-class MinIOSettings:
-    """Cấu hình kết nối MinIO."""
-
-    endpoint: str
-    access_key: str
-    secret_key: str
-    bucket: str
-    secure: bool
-
-
-@dataclass(frozen=True)
 class LLMSettings:
     """Cấu hình dịch vụ LLM."""
 
@@ -83,7 +64,7 @@ class AirflowSettings:
     project_dir: str
 
 
-ServiceName = Literal["motherduck", "minio", "llm", "streamlit", "airflow"]
+ServiceName = Literal["motherduck", "llm", "streamlit", "airflow"]
 
 
 APP = AppSettings(
@@ -95,14 +76,6 @@ MOTHERDUCK = MotherDuckSettings(
     token=getenv("MOTHERDUCK_TOKEN", ""),
     database=getenv("MOTHERDUCK_DATABASE", "airbnb_analytics"),
     schema=getenv("MOTHERDUCK_SCHEMA", "bronze"),
-)
-
-MINIO = MinIOSettings(
-    endpoint=getenv("MINIO_ENDPOINT", "localhost:9000"),
-    access_key=getenv("MINIO_ACCESS_KEY", "minioadmin"),
-    secret_key=getenv("MINIO_SECRET_KEY", "minioadmin"),
-    bucket=getenv("MINIO_BUCKET", "airbnb-data"),
-    secure=_get_bool("MINIO_SECURE", False),
 )
 
 LLM = LLMSettings(
@@ -131,12 +104,6 @@ def validate_required_settings(service: ServiceName | None = None) -> list[str]:
             "MOTHERDUCK_TOKEN": MOTHERDUCK.token,
             "MOTHERDUCK_DATABASE": MOTHERDUCK.database,
             "MOTHERDUCK_SCHEMA": MOTHERDUCK.schema,
-        },
-        "minio": {
-            "MINIO_ENDPOINT": MINIO.endpoint,
-            "MINIO_ACCESS_KEY": MINIO.access_key,
-            "MINIO_SECRET_KEY": MINIO.secret_key,
-            "MINIO_BUCKET": MINIO.bucket,
         },
         "llm": {
             "GROQ_API_KEY": LLM.groq_api_key,
