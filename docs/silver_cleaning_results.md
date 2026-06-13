@@ -13,10 +13,10 @@ Tang Silver chuan hoa 4 bang Bronze cua Airbnb thanh 4 bang sach hon, giu nguyen
 
 | Model | Grain | Noi dung clean chinh |
 | --- | --- | --- |
-| `silver_listings` | 1 dong / listing | Chuan hoa `listing_id`, `host_id`, gia tien, phan tram, boolean, ngay, toa do, review score; loai duplicate theo `listing_id`. |
-| `silver_calendar` | 1 dong / listing / ngay | Chuan hoa ngay, availability boolean, gia tien, minimum/maximum nights; loai duplicate theo `listing_id + calendar_date`. |
+| `silver_listings` | 1 dong / listing | Chuan hoa `listing_id`, `host_id`, gia tien listing, phan tram, boolean, ngay, toa do, review score; loai duplicate theo `listing_id`. |
+| `silver_calendar` | 1 dong / listing / ngay | Chuan hoa ngay, availability boolean, minimum/maximum nights; loai duplicate theo `listing_id + calendar_date`. |
 | `silver_reviews` | 1 dong / review | Chuan hoa `review_id`, `listing_id`, `review_date`, reviewer va comment; loai duplicate theo `review_id`. |
-| `silver_neighbourhoods` | 1 dong / neighbourhood | Chuan hoa ten neighbourhood va neighbourhood group; loai duplicate theo `neighbourhood`. |
+| `silver_neighbourhoods` | 1 dong / neighbourhood | Chuan hoa ten neighbourhood; loai duplicate theo `neighbourhood`. |
 
 ## Quy tac clean da ap dung
 
@@ -26,6 +26,7 @@ Tang Silver chuan hoa 4 bang Bronze cua Airbnb thanh 4 bang sach hon, giu nguyen
 - Date text duoc ep kieu ve `date`.
 - ID chinh duoc ep kieu numeric khi phu hop.
 - Cac bang duoc deduplicate theo grain cua tung bang.
+- Cac cot co ty le null 100% ngay tu tang Bronze khong duoc giu lai o Silver, bao gom `calendar.price`, `calendar.adjusted_price` va cac cot `neighbourhood_group`.
 - Silver khong aggregate KPI lon va khong tach host/location dimension; phan do danh cho Gold.
 
 ## Cach chay
