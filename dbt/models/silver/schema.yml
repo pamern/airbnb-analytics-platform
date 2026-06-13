@@ -43,11 +43,9 @@ models:
         tests:
           - not_null
           - unique
-      - name: neighbourhood_group
-        description: Neighbourhood group name from the raw reference data.
 
   - name: silver_calendar
-    description: Cleaned daily listing availability and price table.
+    description: Cleaned daily listing availability table.
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -63,14 +61,6 @@ models:
         description: Calendar date.
         tests:
           - not_null
-      - name: price
-        description: Daily price converted from currency text to numeric value.
-        tests:
-          - positive_or_null
-      - name: adjusted_price
-        description: Adjusted daily price converted from currency text to numeric value.
-        tests:
-          - positive_or_null
 
   - name: silver_reviews
     description: Cleaned review table, one row per review.

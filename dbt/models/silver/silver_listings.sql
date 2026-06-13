@@ -25,10 +25,6 @@ renamed as (
             {{ clean_text(source_column(listings_source, 'neighbourhood_cleansed')) }},
             {{ clean_text(source_column(listings_source, 'neighbourhood')) }}
         ) as neighbourhood,
-        coalesce(
-            {{ clean_text(source_column(listings_source, 'neighbourhood_group_cleansed')) }},
-            {{ clean_text(source_column(listings_source, 'neighbourhood_group')) }}
-        ) as neighbourhood_group,
         try_cast({{ source_column(listings_source, 'latitude') }} as double) as latitude,
         try_cast({{ source_column(listings_source, 'longitude') }} as double) as longitude,
 
