@@ -62,6 +62,13 @@ models:
               arguments:
                 min_value: -180
                 max_value: 180
+      - name: neighbourhood
+        description: Cleaned neighbourhood name used for location mapping.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('silver_neighbourhoods')
+                field: neighbourhood
       - name: minimum_nights
         description: Minimum nights allowed for the listing.
         tests:

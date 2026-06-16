@@ -10,7 +10,7 @@ Current approach:
 
 Why there is no heuristic dedup rule right now:
 
-- A direct MotherDuck profile run on June 11, 2026 found `0` duplicate keys for `listing_id + calendar_date` in `bronze_calendar`.
+- A direct MotherDuck profile run previously found `0` duplicate keys for `listing_id + calendar_date` in `bronze_calendar`.
 - Adding a tie-break rule without actual duplicate keys would only make the model more complex without improving data quality.
 - If duplicate keys appear later, the project already has a profiling query ready to guide a real dedup rule.
 

@@ -2,7 +2,7 @@
 
 This document records the current data contracts for the core Airbnb warehouse tables.
 
-It is based on the dbt models and tests that passed against MotherDuck on June 11, 2026.
+It is based on the dbt models and tests that passed against MotherDuck on June 16, 2026.
 
 ## Bronze Layer
 

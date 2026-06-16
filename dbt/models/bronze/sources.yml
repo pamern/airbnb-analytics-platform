@@ -49,3 +49,9 @@ sources:
               - not_null
       - name: bronze_neighbourhoods
         description: Raw neighbourhood reference data.
+        columns:
+          - name: neighbourhood
+            description: Raw neighbourhood name.
+            tests:
+              - not_null
+              - unique
