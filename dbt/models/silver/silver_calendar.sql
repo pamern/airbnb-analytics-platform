@@ -29,5 +29,14 @@ deduplicated as (
     ) = 1
 )
 
-select *
-from deduplicated
+select
+    listing_id,
+    calendar_date,
+    is_available,
+    price,
+    adjusted_price,
+    minimum_nights,
+    maximum_nights
+from cleaned
+where listing_id is not null
+  and calendar_date is not null

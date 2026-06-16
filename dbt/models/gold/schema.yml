@@ -1,0 +1,293 @@
+version: 2
+
+models:
+  - name: dim_listing
+    description: Current-state listing dimension with descriptive listing attributes only.
+    columns:
+      - name: listing_key
+        description: Surrogate key for the listing dimension row.
+        tests:
+          - not_null
+          - unique
+      - name: listing_id
+        description: Natural listing identifier from the source.
+        tests:
+          - not_null
+          - unique
+      - name: latitude
+        description: Listing latitude stored as a descriptive location attribute.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: -90
+                max_value: 90
+      - name: longitude
+        description: Listing longitude stored as a descriptive location attribute.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: -180
+                max_value: 180
+
+  - name: dim_host
+    description: Current-state host dimension (SCD Type 1) with the latest observed host attributes from the source.
+    columns:
+      - name: host_key
+        description: Surrogate key for the host dimension row.
+        tests:
+          - not_null
+          - unique
+      - name: host_id
+        description: Natural host identifier from the source.
+        tests:
+          - not_null
+          - unique
+      - name: source_last_scraped_date
+        description: Most recent source scrape date used for the current host record.
+        tests:
+          - not_null
+
+  - name: dim_location
+    description: Location dimension at one row per city and neighbourhood.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - city
+              - neighbourhood
+      - location_member_exists:
+          arguments:
+            city: "{{ env_var('AIRBNB_CITY', 'Bangkok') }}"
+            neighbourhood: UNKNOWN
+    columns:
+      - name: location_key
+        description: Surrogate key for the location dimension row.
+        tests:
+          - not_null
+          - unique
+      - name: city
+        description: City name used for the dataset.
+        tests:
+          - not_null
+      - name: neighbourhood
+        description: Listing neighbourhood.
+        tests:
+          - not_null
+
+  - name: dim_date
+    description: Calendar date dimension used by daily and event facts.
+    columns:
+      - name: date_key
+        description: Integer date key in YYYYMMDD format.
+        tests:
+          - not_null
+          - unique
+      - name: date_day
+        description: Actual calendar date.
+        tests:
+          - not_null
+          - unique
+
+  - name: fact_listing_current_snapshot
+    description: Current-state listing snapshot fact at one row per listing and latest scrape date.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - listing_key
+              - snapshot_date_key
+      - row_count_matches:
+          arguments:
+            compare_model: ref('silver_listings')
+      - unknown_location_ratio_below
+    columns:
+      - name: listing_snapshot_key
+        description: Primary key for the current listing snapshot fact row.
+        tests:
+          - not_null
+          - unique
+      - name: listing_key
+        description: Foreign key to dim_listing.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_key
+      - name: host_key
+        description: Foreign key to dim_host.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        description: Foreign key to dim_location.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: snapshot_date_key
+        description: Foreign key to dim_date representing the latest scrape date.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: last_review_date_key
+        description: Nullable foreign key to dim_date for the last observed review date.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: listing_id
+        description: Degenerate natural identifier kept for traceability to Silver and source data.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_id
+      - name: listing_snapshot_price
+        description: Latest listing price from the listing snapshot source.
+        tests:
+          - positive_or_null
+      - name: listing_count
+        description: Additive count measure fixed to 1 for each listing snapshot row.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1]
+
+  - name: fact_availability_daily
+    description: Daily availability fact at one row per listing and calendar date.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - listing_key
+              - calendar_date_key
+      - row_count_matches:
+          arguments:
+            compare_model: ref('silver_calendar')
+      - unknown_location_ratio_below
+    columns:
+      - name: availability_daily_key
+        description: Primary key for the daily availability fact row.
+        tests:
+          - not_null
+          - unique
+      - name: listing_key
+        description: Foreign key to dim_listing.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_key
+      - name: host_key
+        description: Foreign key to dim_host.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        description: Foreign key to dim_location.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: calendar_date_key
+        description: Foreign key to dim_date.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: listing_id
+        description: Degenerate natural identifier kept for traceability to Silver and source data.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_id
+
+  - name: fact_review
+    description: Review event fact at one row per review.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - review_id
+      - row_count_matches:
+          arguments:
+            compare_model: ref('silver_reviews')
+      - unknown_location_ratio_below
+    columns:
+      - name: review_key
+        description: Primary key for the review fact row.
+        tests:
+          - not_null
+          - unique
+      - name: listing_key
+        description: Foreign key to dim_listing.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_key
+      - name: host_key
+        description: Foreign key to dim_host.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_host')
+                field: host_key
+      - name: location_key
+        description: Foreign key to dim_location.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: review_date_key
+        description: Foreign key to dim_date.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_key
+      - name: review_id
+        description: Natural review identifier from the source.
+        tests:
+          - not_null
+          - unique
+      - name: listing_id
+        description: Degenerate natural identifier kept for traceability to Silver and source data.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_id
+      - name: review_count
+        description: Additive count measure fixed to 1 for each review event row.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [1]

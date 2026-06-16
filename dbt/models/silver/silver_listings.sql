@@ -22,9 +22,13 @@ renamed as (
         {{ clean_boolean(source_column(listings_source, 'host_identity_verified')) }} as host_identity_verified,
 
         coalesce(
-            {{ clean_text(source_column(listings_source, 'neighbourhood_cleansed')) }},
-            {{ clean_text(source_column(listings_source, 'neighbourhood')) }}
+            {{ clean_text(source_column(listings_source, 'neighbourhood_cleansed', default='NULL')) }},
+            {{ clean_text(source_column(listings_source, 'neighbourhood', default='NULL')) }}
         ) as neighbourhood,
+        coalesce(
+            {{ clean_text(source_column(listings_source, 'neighbourhood_group_cleansed', default='NULL')) }},
+            {{ clean_text(source_column(listings_source, 'neighbourhood_group', default='NULL')) }}
+        ) as neighbourhood_group,
         try_cast({{ source_column(listings_source, 'latitude') }} as double) as latitude,
         try_cast({{ source_column(listings_source, 'longitude') }} as double) as longitude,
 
@@ -32,8 +36,8 @@ renamed as (
         {{ clean_text(source_column(listings_source, 'room_type')) }} as room_type,
         try_cast({{ source_column(listings_source, 'accommodates') }} as integer) as accommodates,
         coalesce(
-            try_cast({{ source_column(listings_source, 'bathrooms') }} as double),
-            try_cast(regexp_extract(cast({{ source_column(listings_source, 'bathrooms_text') }} as varchar), '[0-9]+(\\.[0-9]+)?') as double)
+            try_cast({{ source_column(listings_source, 'bathrooms', default='NULL') }} as double),
+            try_cast(regexp_extract(cast({{ source_column(listings_source, 'bathrooms_text', default='NULL') }} as varchar), '[0-9]+(\\.[0-9]+)?') as double)
         ) as bathrooms,
         try_cast({{ source_column(listings_source, 'bedrooms') }} as double) as bedrooms,
         try_cast({{ source_column(listings_source, 'beds') }} as double) as beds,
