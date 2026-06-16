@@ -89,11 +89,9 @@ models:
         tests:
           - not_null
           - unique
-      - name: neighbourhood_group
-        description: Neighbourhood group name from the raw reference data.
 
   - name: silver_calendar
-    description: Cleaned daily listing availability and price table at one row per listing_id and calendar_date.
+    description: Cleaned daily listing availability table at one row per listing_id and calendar_date, with calendar price fields retained when available.
     tests:
       - unique_combination_of_columns:
           arguments:

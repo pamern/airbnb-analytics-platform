@@ -6,7 +6,7 @@
 
 Mục tiêu của project là xây dựng một pipeline phân tích dữ liệu Airbnb theo hướng end-to-end:
 
-- Lưu trữ dữ liệu với MinIO và MotherDuck/DuckDB.
+- Lưu trữ và phân tích dữ liệu với MotherDuck/DuckDB.
 - Transform dữ liệu bằng dbt theo 3 layer: Bronze, Silver, Gold.
 - Huấn luyện mô hình Machine Learning từ dữ liệu Gold layer.
 - Sử dụng LLM để diễn giải insight và kết quả dự đoán.
@@ -24,7 +24,6 @@ Project sử dụng các công nghệ chính:
 - Python
 - uv
 - Docker / Docker Compose
-- MinIO
 - DuckDB / MotherDuck
 - dbt
 - Airflow
@@ -78,8 +77,7 @@ Không nên commit dataset quá lớn lên GitHub. Nếu dữ liệu lớn, ch�
 
 Chứa script nạp dữ liệu.
 
-- Nạp dữ liệu raw vào MinIO.
-- Nạp dữ liệu từ MinIO hoặc local vào MotherDuck.
+- Nạp dữ liệu raw từ local vào MotherDuck.
 - Validate dữ liệu đầu vào ở mức cơ bản.
 
 Ingestion không nên chứa quá nhiều business logic. Logic transform chính nên nằm trong dbt.
@@ -146,8 +144,6 @@ Airflow là công cụ orchestration chính. DAG nên gọi các script hoặc c
 
 Pipeline tổng quát:
 
-load_to_minio
-    ↓
 load_to_motherduck
     ↓
 dbt build
@@ -164,7 +160,6 @@ Ví dụ:
 
 - Đường dẫn project.
 - Biến môi trường.
-- Tên bucket MinIO.
 - Thông tin kết nối MotherDuck.
 - Cấu hình logging.
 
@@ -177,7 +172,6 @@ Chứa helper dùng chung.
 Ví dụ:
 
 - Kết nối MotherDuck.
-- Kết nối MinIO.
 - Đọc/ghi file.
 - Chạy SQL.
 - Tạo logger.
@@ -228,8 +222,6 @@ Pipeline chính đi theo luồng:
 
 Raw Airbnb Data
     ↓
-MinIO
-    ↓
 MotherDuck
     ↓
 dbt Bronze
@@ -269,7 +261,6 @@ Streamlit dashboard là nơi hiển thị kết quả cuối và có thể deplo
 
 Ví dụ chạy script:
 
-uv run python ingestion/load_to_minio.py
 uv run python ingestion/load_to_motherduck.py
 uv run dbt build --project-dir dbt
 uv run python ml/train_model.py
@@ -284,7 +275,6 @@ Docker Compose dùng để chạy stack local.
 
 Các service có thể gồm:
 
-- MinIO
 - Airflow
 - Streamlit app
 - Các service hỗ trợ khác nếu cần
@@ -331,7 +321,6 @@ Không commit các thông tin sau:
 - `.env`
 - API key
 - MotherDuck token
-- MinIO secret key
 - LLM API key
 - Password
 - Dữ liệu quá lớn nếu không cần thiết
@@ -346,7 +335,7 @@ Commit message nên ngắn gọn, rõ chức năng.
 
 Ví dụ:
 
-feat: add MinIO ingestion script
+feat: add MotherDuck ingestion script
 feat: create dbt bronze models
 feat: add Streamlit overview dashboard
 fix: correct MotherDuck connection helper

@@ -19,7 +19,6 @@ airbnb-analytics-platform/
 │   └── external/
 │
 ├── ingestion/
-│   ├── load_to_minio.py
 │   ├── load_to_motherduck.py
 │   └── validate_raw_data.py
 │
@@ -111,7 +110,6 @@ airbnb-analytics-platform/
 │
 ├── utils/
 │   ├── motherduck.py
-│   ├── minio_client.py
 │   ├── io.py
 │   ├── logger.py
 │   └── sql.py
