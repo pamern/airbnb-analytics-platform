@@ -14,6 +14,20 @@ models:
         tests:
           - not_null
           - unique
+      - name: latitude
+        description: Listing latitude stored as a descriptive location attribute.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: -90
+                max_value: 90
+      - name: longitude
+        description: Listing longitude stored as a descriptive location attribute.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: -180
+                max_value: 180
 
   - name: dim_host
     description: Current-state host dimension (SCD Type 1) with the latest observed host attributes from the source.
@@ -34,7 +48,17 @@ models:
           - not_null
 
   - name: dim_location
-    description: Location dimension at one row per city and neighbourhood, with estimated centroid coordinates derived from observed listings.
+    description: Location dimension at one row per city and neighbourhood.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - city
+              - neighbourhood
+      - location_member_exists:
+          arguments:
+            city: "{{ env_var('AIRBNB_CITY', 'Bangkok') }}"
+            neighbourhood: UNKNOWN
     columns:
       - name: location_key
         description: Surrogate key for the location dimension row.
@@ -49,20 +73,6 @@ models:
         description: Listing neighbourhood.
         tests:
           - not_null
-      - name: estimated_centroid_latitude
-        description: Estimated centroid latitude for the neighbourhood.
-        tests:
-          - between_or_null:
-              arguments:
-                min_value: -90
-                max_value: 90
-      - name: estimated_centroid_longitude
-        description: Estimated centroid longitude for the neighbourhood.
-        tests:
-          - between_or_null:
-              arguments:
-                min_value: -180
-                max_value: 180
 
   - name: dim_date
     description: Calendar date dimension used by daily and event facts.
@@ -80,6 +90,16 @@ models:
 
   - name: fact_listing_current_snapshot
     description: Current-state listing snapshot fact at one row per listing and latest scrape date.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - listing_key
+              - snapshot_date_key
+      - row_count_matches:
+          arguments:
+            compare_model: ref('silver_listings')
+      - unknown_location_ratio_below
     columns:
       - name: listing_snapshot_key
         description: Primary key for the current listing snapshot fact row.
@@ -129,6 +149,10 @@ models:
         description: Degenerate natural identifier kept for traceability to Silver and source data.
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_id
       - name: listing_snapshot_price
         description: Latest listing price from the listing snapshot source.
         tests:
@@ -136,7 +160,9 @@ models:
       - name: listing_count
         description: Additive count measure fixed to 1 for each listing snapshot row.
         tests:
-          - positive_or_null
+          - accepted_values:
+              arguments:
+                values: [1]
 
   - name: fact_availability_daily
     description: Daily availability fact at one row per listing and calendar date.
@@ -146,6 +172,10 @@ models:
             combination_of_columns:
               - listing_key
               - calendar_date_key
+      - row_count_matches:
+          arguments:
+            compare_model: ref('silver_calendar')
+      - unknown_location_ratio_below
     columns:
       - name: availability_daily_key
         description: Primary key for the daily availability fact row.
@@ -188,9 +218,22 @@ models:
         description: Degenerate natural identifier kept for traceability to Silver and source data.
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_id
 
   - name: fact_review
     description: Review event fact at one row per review.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - review_id
+      - row_count_matches:
+          arguments:
+            compare_model: ref('silver_reviews')
+      - unknown_location_ratio_below
     columns:
       - name: review_key
         description: Primary key for the review fact row.
@@ -238,7 +281,13 @@ models:
         description: Degenerate natural identifier kept for traceability to Silver and source data.
         tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_listing')
+                field: listing_id
       - name: review_count
         description: Additive count measure fixed to 1 for each review event row.
         tests:
-          - positive_or_null
+          - accepted_values:
+              arguments:
+                values: [1]

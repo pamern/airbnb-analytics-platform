@@ -1,9 +1,9 @@
-{% set city_name = env_var('AIRBNB_CITY', 'Bangkok') %}
-
 select
     md5(cast(listing_id as varchar)) as listing_key,
     listing_id,
     listing_name,
+    latitude,
+    longitude,
     property_type,
     room_type,
     accommodates,

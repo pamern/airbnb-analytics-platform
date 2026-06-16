@@ -2,7 +2,7 @@
 
 This document records the current Gold-layer contracts for the Airbnb warehouse.
 
-It reflects the dbt models and tests that passed against MotherDuck on June 11, 2026.
+It reflects the dbt models and tests that passed against MotherDuck on June 16, 2026.
 
 ## Design Intent
 
@@ -11,7 +11,8 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - dimensions store descriptive attributes
 - facts store event or snapshot measures
 - joins are driven by surrogate keys in Gold
-- natural identifiers are retained in facts only for traceability and debugging
+- dimensions retain their natural keys where needed for business traceability
+- facts retain selected natural identifiers for traceability and debugging
 
 ## Dimensions
 
@@ -23,6 +24,8 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Natural key: `listing_id`.
 - Core attributes:
   - `listing_name`
+  - `latitude`
+  - `longitude`
   - `property_type`
   - `room_type`
   - `accommodates`
@@ -67,11 +70,10 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Core attributes:
   - `city`
   - `neighbourhood`
-  - `estimated_centroid_latitude`
-  - `estimated_centroid_longitude`
 - Current assumptions:
   - Gold v1 does not include `neighbourhood_group`
-  - centroid coordinates are estimated from observed listing coordinates, not authoritative geographic boundaries
+  - Gold includes a reserved `neighbourhood = 'UNKNOWN'` row for each configured city
+  - listings with missing `neighbourhood` values are intentionally mapped to `UNKNOWN` instead of being dropped from Gold facts
 
 ### `dim_date`
 
@@ -127,6 +129,7 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Modeling note:
   - this is not a multi-snapshot historical fact
   - it represents the current listing state only
+  - when `silver_listings.neighbourhood` is null, the fact row is preserved and mapped to `dim_location.neighbourhood = 'UNKNOWN'`
 
 ### `fact_availability_daily`
 
@@ -147,6 +150,7 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Modeling note:
   - Gold v1 does not expose daily calendar price fields because the current calendar pricing data is fully null
   - listing-level pricing analytics should use the snapshot price in `fact_listing_current_snapshot`
+  - when the parent listing has a null `neighbourhood`, the row is preserved and mapped to `UNKNOWN` in `dim_location`
 
 ### `fact_review`
 
@@ -168,6 +172,7 @@ The Gold layer follows a Kimball-style star schema for the current project scope
 - Modeling note:
   - long free-text review comments are intentionally excluded from Gold v1
   - if text analytics is needed later, that should be modeled separately
+  - when the parent listing has a null `neighbourhood`, the row is preserved and mapped to `UNKNOWN` in `dim_location`
 
 ## Operational Notes
 
@@ -181,7 +186,16 @@ The Gold layer follows a Kimball-style star schema for the current project scope
   - `dim_host`
   - `dim_location`
   - `dim_date`
-- Natural identifiers remain in facts for traceability, not as primary join keys.
+- Natural identifiers may appear in both dimensions and facts for traceability, but they are not the primary join keys in Gold.
+- `dim_location` contains an `UNKNOWN` fallback member so fact grains are preserved even when source geography is incomplete.
+- Gold monitoring includes:
+  - a singular test that asserts the `UNKNOWN` member exists in `dim_location`
+  - row-preservation tests that compare each fact row count with its Silver parent input
+  - a ratio test `unknown_location_ratio_below` on each fact, with default threshold `0.01` and optional override via `GOLD_UNKNOWN_LOCATION_MAX_RATIO`
+- Baseline on June 16, 2026 after the fallback change:
+  - `fact_listing_current_snapshot` unknown ratio = `0.0`
+  - `fact_availability_daily` unknown ratio = `0.0`
+  - `fact_review` unknown ratio = `0.0`
 - If a source refresh breaks one of these assumptions:
   1. let Bronze or Silver tests fail
   2. profile the changed source pattern

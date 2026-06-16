@@ -29,7 +29,7 @@ review_fact as (
         on listing.host_id = host_dim.host_id
     inner join {{ ref('dim_location') }} as location_dim
         on location_dim.city = '{{ city_name }}'
-       and listing.neighbourhood = location_dim.neighbourhood
+       and coalesce(listing.neighbourhood, 'UNKNOWN') = location_dim.neighbourhood
 )
 
 select *
