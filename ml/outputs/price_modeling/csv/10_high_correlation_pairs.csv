@@ -1,0 +1,7 @@
+﻿feature_1,feature_2,spearman_correlation
+host_listings_count,host_total_listings_count,0.9732446183438898
+host_listings_count,calculated_host_listings_count,0.954416978802405
+host_total_listings_count,calculated_host_listings_count,0.9258149918858182
+number_of_reviews_ltm,reviews_per_month,0.9104878888928076
+number_of_reviews,reviews_per_month,0.889576472903889
+number_of_reviews,number_of_reviews_ltm,0.8513544655179426

@@ -1,0 +1,30 @@
+﻿feature,feature_group,univariate_score,univariate_rank,selection_note
+host_total_listings_count,numeric,1.0,1,Univariate score cao
+calculated_host_listings_count,numeric,0.9847924077780255,2,Univariate score cao
+host_listings_count,numeric,0.9840238882633993,3,Univariate score cao
+neighbourhood,categorical,0.6831034753441719,4,Univariate score cao
+host_acceptance_rate,numeric,0.5778386780185677,5,Univariate score cao
+accommodates,numeric,0.4836486927050776,6,Univariate score cao
+bedrooms,numeric,0.401575122104452,7,Univariate score cao
+bathrooms,numeric,0.3599762742537332,8,Univariate score cao
+minimum_nights,numeric,0.3096399546902028,9,Univariate score cao
+amenities_count,numeric,0.3065290941429612,10,Univariate score cao
+beds,numeric,0.2879257201002618,11,Univariate score cao
+property_base_group,categorical,0.2853183549721032,12,Univariate score cao
+room_type,categorical,0.2533372802415895,13,Chỉ dùng làm tham khảo
+host_response_rate,numeric,0.2225454505058986,14,Chỉ dùng làm tham khảo
+host_response_time,categorical,0.19314246626247458,15,Chỉ dùng làm tham khảo
+maximum_nights,numeric,0.06648614016236612,16,Chỉ dùng làm tham khảo
+review_scores_location,review_score,0.05911180811638715,17,Chỉ dùng làm tham khảo
+reviews_per_month,review_count,0.05749954294399224,18,Chỉ dùng làm tham khảo
+review_scores_rating,review_score,0.04653143799292354,19,Chỉ dùng làm tham khảo
+has_reviews,binary,0.046456301602619765,20,Chỉ dùng làm tham khảo
+review_scores_accuracy,review_score,0.04268968775585649,21,Chỉ dùng làm tham khảo
+number_of_reviews,review_count,0.04198346000928386,22,Chỉ dùng làm tham khảo
+review_scores_value,review_score,0.039739113217937036,23,Chỉ dùng làm tham khảo
+review_scores_checkin,review_score,0.039164812918931306,24,Chỉ dùng làm tham khảo
+review_scores_communication,review_score,0.03614259210881315,25,Chỉ dùng làm tham khảo
+number_of_reviews_ltm,review_count,0.0357159151372106,26,Chỉ dùng làm tham khảo
+instant_bookable,binary,0.018895357553723967,27,Chỉ dùng làm tham khảo
+review_scores_cleanliness,review_score,0.018348863806632986,28,Chỉ dùng làm tham khảo
+host_is_superhost,binary,0.0,29,Chỉ dùng làm tham khảo

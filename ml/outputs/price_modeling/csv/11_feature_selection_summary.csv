@@ -1,0 +1,30 @@
+﻿feature,feature_group,univariate_rank,tree_rank,tree_importance_mean,high_correlation_flag,selected,reason
+neighbourhood,categorical,4,2,0.10348607890102558,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+accommodates,numeric,6,1,0.11492474694304651,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+host_total_listings_count,numeric,1,6,0.030690890182718776,True,True,tree importance cao; univariate score tốt
+bedrooms,numeric,7,3,0.09939862610387093,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+bathrooms,numeric,8,4,0.0419464713697287,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+room_type,categorical,13,5,0.04021668987745194,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+calculated_host_listings_count,numeric,2,11,0.01770469450729969,True,True,tree importance cao; univariate score tốt
+amenities_count,numeric,10,7,0.021886389233520022,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+host_acceptance_rate,numeric,5,10,0.019618432443591006,False,True,tree importance cao; univariate score tốt
+minimum_nights,numeric,9,8,0.021404401047266475,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+host_listings_count,numeric,3,13,0.01435979942723058,True,True,tree importance cao; univariate score tốt
+host_response_time,categorical,15,9,0.019892710232985212,False,True,tree importance cao; univariate score tốt
+property_base_group,categorical,12,12,0.017690717883942986,False,True,giữ vì quan trọng nghiệp vụ; tree importance cao; univariate score tốt
+host_response_rate,numeric,14,15,0.010304201661335045,False,True,tree importance cao; univariate score tốt
+review_scores_location,review_score,17,14,0.014204304646946175,False,True,tree importance cao
+beds,numeric,11,18,0.0038651752906239565,False,True,tree importance cao; univariate score tốt
+reviews_per_month,review_count,18,19,0.0033336293807501695,True,True,tree importance cao
+review_scores_value,review_score,23,17,0.004498885308614376,False,True,tree importance cao
+number_of_reviews_ltm,review_count,26,16,0.0046677958740145905,True,True,tree importance cao
+maximum_nights,numeric,16,23,0.0013587252299624986,False,True,giữ để không loại quá mạnh
+review_scores_accuracy,review_score,21,21,0.002236017282204772,False,True,giữ để không loại quá mạnh
+has_reviews,binary,20,29,0,False,True,giữ vì quan trọng nghiệp vụ
+number_of_reviews,review_count,22,22,0.0018634582118026266,True,False,loại vì xếp hạng thấp hơn nhóm được giữ; có tương quan cao với feature khác
+review_scores_cleanliness,review_score,28,20,0.003207728795713671,False,False,loại vì xếp hạng thấp hơn nhóm được giữ
+review_scores_rating,review_score,19,26,0.0007641999718199677,False,False,loại vì xếp hạng thấp hơn nhóm được giữ
+review_scores_communication,review_score,25,25,0.0007941999862816184,False,False,loại vì xếp hạng thấp hơn nhóm được giữ
+host_is_superhost,binary,29,24,0.0008130971987974078,False,False,loại vì xếp hạng thấp hơn nhóm được giữ
+review_scores_checkin,review_score,24,28,0.0005415050567982082,False,False,loại vì xếp hạng thấp hơn nhóm được giữ
+instant_bookable,binary,27,27,0.0007109263545199363,False,False,loại vì xếp hạng thấp hơn nhóm được giữ
