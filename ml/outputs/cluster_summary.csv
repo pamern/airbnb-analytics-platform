@@ -1,4 +1,0 @@
-cluster,segment_name,listing_count,room_type_top,property_base_group_top,median_accommodates,median_bedrooms,median_bathrooms,median_beds,median_amenities_count,median_minimum_nights
-0,Standard short-stay listings,14039,Entire home/apt,Apartment / Condo,2.0,1.0,1.0,1.0,22.0,1.0
-1,Long-stay standard apartments,7038,Entire home/apt,Apartment / Condo,2.0,1.0,1.0,1.0,31.0,28.0
-2,Large short-stay group homes,2196,Entire home/apt,House / Home,8.0,3.0,3.0,5.0,32.0,1.0
