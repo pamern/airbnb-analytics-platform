@@ -1,6 +1,6 @@
 {
-    "run_started_at": "2026-06-17T10:59:16",
-    "run_completed_at": "2026-06-17T11:23:57",
+    "run_started_at": "2026-06-18T21:45:22",
+    "run_completed_at": "2026-06-18T23:01:46",
     "target": "log_price",
     "random_state": 42,
     "test_size": 0.2,
@@ -26,12 +26,12 @@
         "r2_std": 0.017352,
         "adjusted_r2_mean": 0.675751,
         "adjusted_r2_std": 0.017797,
-        "fit_time_mean": 3.746,
-        "predict_time_mean": 0.201,
-        "delta_mae": 0.0012989999999999,
-        "delta_rmse": 0.002307,
-        "delta_r2": -0.0033549999999999,
-        "delta_fit_time": -0.2029999999999998,
+        "fit_time_mean": 2.739,
+        "predict_time_mean": 0.12,
+        "delta_mae": 0.0012989999999999946,
+        "delta_rmse": 0.0023070000000000035,
+        "delta_r2": -0.003354999999999997,
+        "delta_fit_time": -0.1459999999999999,
         "selected_eligible": true,
         "candidate_allowed": true
     },
@@ -58,24 +58,6 @@
         "verbose": 0,
         "warm_start": false
     },
-    "metrics": [
-        "mae",
-        "rmse",
-        "r2",
-        "adjusted_r2"
-    ],
-    "xgboost_available": true,
-    "catboost_available": true,
-    "tree_importance_errors": {
-        "RandomForestRegressor": "Could not pickle the task to send it to the workers."
-    },
-    "output_directories": {
-        "csv": "ml/outputs/price_modeling/csv",
-        "charts": "ml/outputs/price_modeling/charts",
-        "models": "ml/outputs/price_modeling/models",
-        "metadata": "ml/outputs/price_modeling/metadata"
-    },
-    "model_artifact_saved": false,
     "selected_feature_eligibility": [
         {
             "model": "HistGradientBoostingRegressor",
@@ -88,8 +70,8 @@
             "mae_change_pct": 0.0045050356518602595,
             "r2_change": -0.003354999999999997,
             "rmse_std_change": -0.00024399999999999943,
-            "fit_time_change": -0.20299999999999985,
-            "fit_time_change_pct": -0.054191137213027187
+            "fit_time_change": -0.1459999999999999,
+            "fit_time_change_pct": -0.05330412559328219
         },
         {
             "model": "RandomForestRegressor",
@@ -102,13 +84,13 @@
             "mae_change_pct": -0.01225492755287786,
             "r2_change": 0.0035039999999999516,
             "rmse_std_change": -0.0002470000000000007,
-            "fit_time_change": 411.147,
-            "fit_time_change_pct": 8.940310515786727
+            "fit_time_change": 615.693,
+            "fit_time_change_pct": 15.867967320429885
         },
         {
             "model": "XGBRegressor",
-            "selected_eligible": true,
-            "eligibility_reason": "Eligible: improved RMSE and reduced feature count",
+            "selected_eligible": false,
+            "eligibility_reason": "Rejected: fit time increased excessively",
             "full_feature_count": 29,
             "selected_feature_count": 22,
             "feature_reduction_pct": 0.2413793103448276,
@@ -116,8 +98,8 @@
             "mae_change_pct": -0.004120562079967392,
             "r2_change": 0.0038849999999999163,
             "rmse_std_change": -0.002463,
-            "fit_time_change": -1.0139999999999998,
-            "fit_time_change_pct": -0.29753521126760557
+            "fit_time_change": 3.5409999999999995,
+            "fit_time_change_pct": 1.101057213930348
         }
     ],
     "feature_selection_thresholds": {
@@ -126,5 +108,21 @@
         "max_rmse_std_increase": 0.005,
         "max_fit_time_increase_pct": 0.2,
         "max_fit_time_increase_seconds": 1.0
-    }
+    },
+    "metrics": [
+        "mae",
+        "rmse",
+        "r2",
+        "adjusted_r2"
+    ],
+    "xgboost_available": true,
+    "catboost_available": true,
+    "tree_importance_errors": {},
+    "output_directories": {
+        "csv": "ml/outputs/price_modeling/csv",
+        "charts": "ml/outputs/price_modeling/charts",
+        "models": "ml/outputs/price_modeling/models",
+        "metadata": "ml/outputs/price_modeling/metadata"
+    },
+    "model_artifact_saved": false
 }
