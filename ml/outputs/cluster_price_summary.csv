@@ -1,0 +1,4 @@
+cluster,segment_name,listing_count,median_price,p25_price,p75_price,mean_price
+0,Standard short-stay listings,14039,1324.0,900.0,2000.0,2206.0363273737444
+1,Long-stay standard apartments,7038,1274.0,903.0,1798.0,1943.0667803353226
+2,Large short-stay group homes,2196,4251.0,2631.75,6823.75,6468.912112932605
