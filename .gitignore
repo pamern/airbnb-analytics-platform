@@ -1,6 +1,7 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.tmp.*
 build/
 dist/
 wheels/
@@ -17,6 +18,7 @@ data/raw/
 
 # Local service data
 minio_data/
+*.log
 
 # dbt artifacts and local DuckDB files
 dbt/target/
