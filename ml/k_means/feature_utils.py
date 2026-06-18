@@ -1,14 +1,12 @@
 """
 File clean feature chuẩn bị cho KMeans matrix, dùng để def hàm chứ không chạy.
-
-File này chỉ xử lý feature:
 - clean price
-- drop price bị thiếu hoặc <= 0
-- group property_type thành property_base_group
-- count amenities thành amenities_count
-- log minimum_nights thành minimum_nights_log
-- fill median cho bedrooms, bathrooms, beds theo room_type
-- drop dòng thiếu feature bắt buộc để train cluster
+- group property
+- count amenities
+- log minimum nights
+- median cho bedrooms, bathrooms, beds
+- drop price null / price <= 0
+- drop dòng thiếu feature bắt buộc
 """
 
 from __future__ import annotations
