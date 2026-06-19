@@ -95,14 +95,6 @@ airbnb-analytics-platform/
 │       ├── kpis.py
 │       └── layout.py
 │
-├── airflow/
-│   ├── dags/
-│   │   └── airbnb_pipeline.py
-│   ├── logs/
-│   │   └── .gitkeep
-│   └── plugins/
-│       └── .gitkeep
-│
 ├── configs/
 │   ├── paths.py
 │   ├── settings.py
