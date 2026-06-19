@@ -1,0 +1,2 @@
+model,feature_set,rmse_log,mae_log,r2_log,rmse_price,mae_price,mean_residual_log,overprediction_rate,underprediction_rate
+XGBRegressor,Selected,0.384831286971377,0.2530579849996583,0.7251935516165695,4071.276026509637,717.3424887373419,-0.0068789634871576875,0.530827067669173,0.4691729323308271

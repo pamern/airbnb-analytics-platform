@@ -1,4 +1,0 @@
-﻿test,variable_x,variable_y,spearman_rho,p_value,n,interpretation,statistic,alpha,reject_h0,n_groups,group_names,epsilon_squared
-Spearman correlation,absolute_error_log,actual_log_price,0.09290790019600989,2.1403519004636124e-10,4655.0,Rất yếu,,,,,,
-Spearman correlation,absolute_error_price,actual_price,0.489468796494939,4.4613267163663344e-279,4655.0,Trung bình,,,,,,
-Kruskal-Wallis,price_segment,absolute_error_log,,5.450685824144487e-76,,,356.9816997168134,0.05,True,5.0,"1,000-2,000 THB, < 1,000 THB, 2,000-5,000 THB, 5,000-10,000 THB, > 10,000 THB",0.07591004294985235

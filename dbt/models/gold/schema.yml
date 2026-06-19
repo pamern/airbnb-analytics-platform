@@ -380,6 +380,11 @@ models:
         description: Source property type of the listing.
       - name: room_type
         description: Source room type of the listing.
+      - name: price
+        description: Original listing price used to validate and invert the log-price prediction target. This column must not be used as a model feature.
+        tests:
+          - not_null
+          - positive_or_null
       - name: accommodates
         description: Maximum number of guests the listing accommodates.
       - name: bathrooms

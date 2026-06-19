@@ -7,11 +7,11 @@ with listings as (
         neighbourhood,
         property_type,
         room_type,
+        price,
         accommodates,
         bathrooms,
         bedrooms,
         beds,
-        price,
         minimum_nights,
         maximum_nights,
         instant_bookable,
@@ -35,6 +35,7 @@ with listings as (
         amenities
     from {{ ref('silver_listings') }}
     where price is not null
+      and price > 0
 ),
 
 engineered as (
@@ -44,6 +45,7 @@ engineered as (
         neighbourhood,
         property_type,
         room_type,
+        price,
         accommodates,
         bathrooms,
         bedrooms,

@@ -1,2 +1,0 @@
-﻿n_test,mean_residual_log,median_residual_log,mean_residual_price,median_residual_price,mae_log,rmse_log,mae_price,rmse_price,median_absolute_error_price,median_absolute_percentage_error,under_prediction_count,under_prediction_pct,over_prediction_count,over_prediction_pct
-4655,4.277538510474398e-05,-0.009149257681890788,675.1404860942115,-9.824951171874773,0.2652020389444477,0.40671536413064563,1132.9651217844767,20133.799876234745,247.40631103515602,18.202580915178558,2260,48.5499462943072,2395,51.4500537056928

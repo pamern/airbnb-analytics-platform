@@ -1,6 +1,7 @@
 ﻿feature,dtype,missing_count,missing_rate,unique_count
 neighbourhood,str,0,0.0,50
 room_type,str,0,0.0,4
+price,float64,0,0.0,4489
 accommodates,int32,0,0.0,16
 bathrooms,float64,60,0.26,31
 bedrooms,float64,88,0.38,20

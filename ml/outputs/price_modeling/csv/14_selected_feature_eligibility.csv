@@ -1,4 +1,0 @@
-﻿model,selected_eligible,eligibility_reason,full_feature_count,selected_feature_count,feature_reduction_pct,rmse_change_pct,mae_change_pct,r2_change,rmse_std_change,fit_time_change,fit_time_change_pct
-HistGradientBoostingRegressor,True,Eligible: RMSE degradation within 1% tolerance,29,22,0.2413793103448276,0.005394964232345941,0.0045050356518602595,-0.003354999999999997,-0.00024399999999999943,-0.1459999999999999,-0.05330412559328219
-RandomForestRegressor,False,Rejected: fit time increased excessively,29,22,0.2413793103448276,-0.005085794756339287,-0.01225492755287786,0.0035039999999999516,-0.0002470000000000007,615.693,15.867967320429885
-XGBRegressor,False,Rejected: fit time increased excessively,29,22,0.2413793103448276,-0.00586854730422244,-0.004120562079967392,0.0038849999999999163,-0.002463,3.5409999999999995,1.101057213930348

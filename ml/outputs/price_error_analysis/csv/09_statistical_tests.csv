@@ -1,0 +1,6 @@
+test,statistic,p_value
+spearman_actual_price_absolute_error,0.4755719591118026,2.118991650951854e-261
+kruskal_absolute_error_by_price_segment,1307.7775014898702,6.853166816391479e-282
+kruskal_absolute_error_by_neighbourhood,213.15247667424268,2.614718467020305e-31
+kruskal_absolute_error_by_room_type,56.979109970504545,2.5964033033030792e-12
+kruskal_absolute_error_by_property_group,69.23279305703484,6.230578471862539e-15
