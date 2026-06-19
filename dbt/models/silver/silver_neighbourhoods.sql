@@ -7,8 +7,7 @@ with source_data as (
 
 cleaned as (
     select
-        {{ clean_text(source_column(neighbourhoods_source, 'neighbourhood')) }} as neighbourhood,
-        {{ clean_text(source_column(neighbourhoods_source, 'neighbourhood_group')) }} as neighbourhood_group
+        {{ clean_text(source_column(neighbourhoods_source, 'neighbourhood')) }} as neighbourhood
     from source_data as src
 ),
 
@@ -18,7 +17,7 @@ deduplicated as (
     where neighbourhood is not null
     qualify row_number() over (
         partition by lower(neighbourhood)
-        order by neighbourhood_group nulls last
+        order by neighbourhood
     ) = 1
 )
 

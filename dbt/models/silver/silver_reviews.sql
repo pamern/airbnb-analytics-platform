@@ -14,20 +14,11 @@ cleaned as (
         {{ clean_text(source_column(reviews_source, 'reviewer_name')) }} as reviewer_name,
         {{ clean_text(source_column(reviews_source, 'comments')) }} as comments
     from source_data as src
-),
-
-deduplicated as (
-    select
-        *,
-        comments is not null as has_comment
-    from cleaned
-    where review_id is not null
-      and listing_id is not null
-    qualify row_number() over (
-        partition by review_id
-        order by review_date desc nulls last
-    ) = 1
 )
 
-select *
-from deduplicated
+select
+    *,
+    comments is not null as has_comment
+from cleaned
+where review_id is not null
+  and listing_id is not null
