@@ -1,0 +1,24 @@
+{
+  "model_name": "listing_segment_kmeans",
+  "run_timestamp": "2026-06-19T09:23:33.712801+00:00",
+  "run_timezone": "UTC",
+  "source_table": "gold.gold_cluster_model_features",
+  "row_count": 23273,
+  "n_clusters": 3,
+  "random_state": 42,
+  "kmeans_parameters": {
+    "n_clusters": 3,
+    "random_state": 42,
+    "n_init": 10
+  },
+  "evaluation_metrics": {
+    "inertia": 93785.95796323312,
+    "n_clusters_observed": 3,
+    "silhouette_score": 0.2508354584306966,
+    "calinski_harabasz_score": 8210.49827441216,
+    "davies_bouldin_score": 1.308606634210077
+  },
+  "artifact_path": "D:\\Projects\\Y2026_Sources\\airbnb-analytics-platform\\ml\\artifacts\\20260619_092333_listing_segment_kmeans.joblib",
+  "python_version": "3.12.10",
+  "scikit_learn_version": "1.9.0"
+}
