@@ -2,6 +2,8 @@
 
 with listings as (
     select
+        listing_id,
+        host_id,
         neighbourhood,
         property_type,
         room_type,
@@ -14,15 +16,12 @@ with listings as (
         maximum_nights,
         instant_bookable,
         host_response_time,
+        host_response_rate,
         host_acceptance_rate,
         host_is_superhost,
         host_listings_count,
         host_total_listings_count,
         calculated_host_listings_count,
-        availability_30,
-        availability_60,
-        availability_90,
-        availability_365,
         number_of_reviews,
         number_of_reviews_ltm,
         reviews_per_month,
@@ -40,6 +39,8 @@ with listings as (
 
 engineered as (
     select
+        listing_id,
+        host_id,
         neighbourhood,
         property_type,
         room_type,
@@ -51,15 +52,12 @@ engineered as (
         maximum_nights,
         instant_bookable,
         host_response_time,
+        host_response_rate,
         host_acceptance_rate,
         host_is_superhost,
         host_listings_count,
         host_total_listings_count,
         calculated_host_listings_count,
-        availability_30,
-        availability_60,
-        availability_90,
-        availability_365,
         number_of_reviews,
         number_of_reviews_ltm,
         reviews_per_month,
