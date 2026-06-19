@@ -1,0 +1,6 @@
+metric,value
+inertia,93785.95796323312
+n_clusters_observed,3.0
+silhouette_score,0.2508354584306966
+calinski_harabasz_score,8210.49827441216
+davies_bouldin_score,1.308606634210077
