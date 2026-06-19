@@ -10,7 +10,9 @@ PROJECT_ROOT = next(
 )
 
 MODEL_NAME = "listing_segment_kmeans"
+MODEL_DISPLAY_NAME = "KMeans"
 SOURCE_TABLE = "gold.gold_cluster_model_features"
+SEGMENT_TABLE = "gold.gold_listing_segments"
 
 IDENTIFIER_COLUMNS = ["listing_id"]
 CATEGORICAL_FEATURES = ["room_type", "property_base_group"]
@@ -39,6 +41,17 @@ KMEANS_PARAMS = {
     "random_state": RANDOM_STATE,
     "n_init": KMEANS_N_INIT,
 }
+
+ASSIGNMENT_COLUMNS = [
+    "listing_id",
+    "cluster_id",
+    "segment_name",
+    "distance_to_centroid",
+    "run_id",
+    "model_name",
+    "model_version",
+    "assigned_at",
+]
 
 SEGMENT_MAP = {
     0: "Standard short-stay listings",

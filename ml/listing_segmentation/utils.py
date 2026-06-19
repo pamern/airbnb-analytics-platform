@@ -14,6 +14,7 @@ import sklearn
 from sklearn.pipeline import Pipeline
 
 from ml.listing_segmentation.config import (
+    ASSIGNMENT_COLUMNS,
     ARTIFACT_DIR,
     ARTIFACT_SUFFIX,
     CATEGORICAL_FEATURES,
@@ -22,6 +23,7 @@ from ml.listing_segmentation.config import (
     METADATA_OUTPUT_DIR,
     MODEL_FEATURES,
     MODEL_NAME,
+    MODEL_DISPLAY_NAME,
     N_CLUSTERS,
     NUMERICAL_FEATURES,
     RANDOM_STATE,
@@ -60,15 +62,7 @@ def save_cluster_outputs(
         "cluster_metrics": CSV_OUTPUT_DIR / "03_cluster_metrics.csv",
         "cluster_centroids": CSV_OUTPUT_DIR / "04_cluster_centroids.csv",
     }
-    assignment_columns = [
-        "listing_id",
-        "cluster_id",
-        "distance_to_centroid",
-        "segment_name",
-        "artifact_path",
-        "run_timestamp",
-    ]
-    clustered[assignment_columns].to_csv(paths["cluster_assignments"], index=False)
+    clustered[ASSIGNMENT_COLUMNS].to_csv(paths["cluster_assignments"], index=False)
     profiles.to_csv(paths["cluster_profiles"], index=False)
     metrics_frame.to_csv(paths["cluster_metrics"], index=False)
     centroids.to_csv(paths["cluster_centroids"], index=False)
@@ -78,9 +72,14 @@ def save_cluster_outputs(
 def save_metadata(
     *,
     run_timestamp: datetime,
+    run_id: str,
+    model_version: str,
+    assigned_at: str,
     row_count: int,
     metrics: dict[str, Any],
     artifact_path: Path,
+    cluster_distribution: list[dict[str, Any]],
+    database_write: dict[str, Any] | None = None,
 ) -> dict[str, Path]:
     METADATA_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     paths = {
@@ -89,16 +88,22 @@ def save_metadata(
         "model_config": METADATA_OUTPUT_DIR / "03_model_config.json",
     }
     run_summary = {
+        "run_id": run_id,
         "model_name": MODEL_NAME,
+        "model_display_name": MODEL_DISPLAY_NAME,
+        "model_version": model_version,
+        "assigned_at": assigned_at,
         "run_timestamp": run_timestamp.isoformat(),
         "run_timezone": "UTC",
         "source_table": SOURCE_TABLE,
         "row_count": row_count,
         "n_clusters": N_CLUSTERS,
+        "cluster_distribution": cluster_distribution,
         "random_state": RANDOM_STATE,
         "kmeans_parameters": KMEANS_PARAMS,
         "evaluation_metrics": metrics,
-        "artifact_path": str(artifact_path),
+        "local_artifact_filename": artifact_path.name,
+        "database_write": database_write,
         "python_version": platform.python_version(),
         "scikit_learn_version": sklearn.__version__,
     }
@@ -111,6 +116,8 @@ def save_metadata(
     }
     model_config = {
         "model_name": MODEL_NAME,
+        "model_display_name": MODEL_DISPLAY_NAME,
+        "model_version": model_version,
         "source_table": SOURCE_TABLE,
         "artifact_type": "sklearn_pipeline_joblib",
         "pipeline_steps": ["ColumnTransformer", "OneHotEncoder", "StandardScaler", "KMeans"],

@@ -1,5 +1,7 @@
 {
   "model_name": "listing_segment_kmeans",
+  "model_display_name": "KMeans",
+  "model_version": "20260619_100041",
   "source_table": "gold.gold_cluster_model_features",
   "artifact_type": "sklearn_pipeline_joblib",
   "pipeline_steps": [
