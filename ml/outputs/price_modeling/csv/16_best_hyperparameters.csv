@@ -1,3 +1,0 @@
-﻿model,feature_set,best_params,best_cv_rmse
-HistGradientBoostingRegressor,Full,"{""learning_rate"": 0.1317609852838106, ""max_leaf_nodes"": 57, ""max_depth"": null, ""min_samples_leaf"": 17, ""l2_regularization"": 0.00011515414867394198, ""max_bins"": 255}",0.4306175265223572
-XGBRegressor,Selected,"{""learning_rate"": 0.034246398779081366, ""max_depth"": 8, ""min_child_weight"": 4, ""subsample"": 0.7650915513722765, ""colsample_bytree"": 0.8207240159340592, ""gamma"": 0.03262752834716495, ""reg_alpha"": 0.001997728480368332, ""reg_lambda"": 0.01363366782252473}",0.41859073928966656
