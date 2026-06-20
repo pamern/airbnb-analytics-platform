@@ -14,6 +14,21 @@ from ml.listing_segmentation.config import (
 )
 
 
+def prepare_segmentation_frame(features):
+    """Return a shallowly normalized frame while preserving existing feature values."""
+    return features.copy()
+
+
+def build_segmentation_preprocessor():
+    """Return the unchanged preprocessor from the accepted segmentation pipeline."""
+    return build_listing_segment_pipeline().named_steps["preprocessor"]
+
+
+def get_transformed_feature_names(preprocessor) -> list[str]:
+    """Return fitted transformed feature names in their established order."""
+    return preprocessor.get_feature_names_out(CATEGORICAL_FEATURES + NUMERICAL_FEATURES).tolist()
+
+
 def build_listing_segment_pipeline() -> Pipeline:
     """Build a single sklearn Pipeline containing preprocessing and KMeans."""
     preprocessor = ColumnTransformer(

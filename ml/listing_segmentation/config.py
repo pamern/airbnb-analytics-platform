@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -66,3 +67,21 @@ CHART_OUTPUT_DIR = OUTPUT_ROOT / "charts"
 
 ARTIFACT_DIR = PROJECT_ROOT / "ml" / "artifacts"
 ARTIFACT_SUFFIX = "listing_segment_kmeans.joblib"
+
+
+@dataclass(frozen=True)
+class SegmentationConfig:
+    """Immutable configuration for the accepted listing-segmentation model."""
+
+    model_task: str = "listing_segmentation"
+    algorithm: str = "KMeans"
+    n_clusters: int = N_CLUSTERS
+    random_state: int = RANDOM_STATE
+    n_init: int = KMEANS_N_INIT
+    feature_set_version: str = "segment_features_v001"
+    model_features: tuple[str, ...] = tuple(MODEL_FEATURES)
+    primary_metric: str = "silhouette_score"
+    secondary_metrics: tuple[str, ...] = ("inertia", "calinski_harabasz_score", "davies_bouldin_score")
+    artifact_root: str | None = None
+    output_root: str | None = None
+    run_visualizations: bool = False

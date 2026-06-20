@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from datetime import datetime, timezone
 
 import numpy as np
 import pandas as pd
@@ -100,6 +101,27 @@ def build_cluster_metrics_frame(metrics: dict[str, Any]) -> pd.DataFrame:
     return pd.DataFrame(
         [{"metric": metric_name, "value": metric_value} for metric_name, metric_value in metrics.items()]
     )
+
+
+def evaluate_segmentation_model(
+    model: Pipeline,
+    features: pd.DataFrame,
+    cluster_labels: np.ndarray,
+) -> dict[str, Any]:
+    """Evaluate the fitted model using the unchanged clustering metric implementation."""
+    return evaluate_clustering(model, features, cluster_labels)
+
+
+def build_segmentation_metrics_long_format(
+    metrics: dict[str, Any], *, model_version: str, dataset_type: str = "train"
+) -> pd.DataFrame:
+    """Return compatible long-format records for future ML metric storage."""
+    evaluated_at = datetime.now(timezone.utc).isoformat()
+    return pd.DataFrame([
+        {"model_version": model_version, "dataset_type": dataset_type, "metric_name": name,
+         "metric_value": value, "metric_std": None, "evaluated_at": evaluated_at}
+        for name, value in metrics.items()
+    ])
 
 
 def build_centroids_frame(model: Pipeline) -> pd.DataFrame:
