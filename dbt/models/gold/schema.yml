@@ -363,3 +363,81 @@ models:
         tests:
           - not_null
           - non_negative
+
+  - name: gold_price_model_features
+    description: Listing-level feature mart and log-transformed price target for price-model training and evaluation.
+    columns:
+      - name: listing_id
+        description: Natural listing identifier and unique row key for the price-model feature set.
+        tests:
+          - not_null
+          - unique
+      - name: host_id
+        description: Natural identifier of the listing host.
+      - name: neighbourhood
+        description: Neighbourhood of the listing.
+      - name: property_type
+        description: Source property type of the listing.
+      - name: room_type
+        description: Source room type of the listing.
+      - name: price
+        description: Original listing price used to validate and invert the log-price prediction target. This column must not be used as a model feature.
+        tests:
+          - not_null
+          - positive_or_null
+      - name: accommodates
+        description: Maximum number of guests the listing accommodates.
+      - name: bathrooms
+        description: Number of bathrooms reported for the listing.
+      - name: bedrooms
+        description: Number of bedrooms reported for the listing.
+      - name: beds
+        description: Number of beds reported for the listing.
+      - name: minimum_nights
+        description: Minimum required number of nights for a booking.
+      - name: maximum_nights
+        description: Maximum allowed number of nights for a booking.
+      - name: instant_bookable
+        description: Whether the listing supports instant booking.
+      - name: host_response_time
+        description: Categorical host response-time bucket.
+      - name: host_response_rate
+        description: Host response rate from the source listing record.
+      - name: host_acceptance_rate
+        description: Host acceptance rate from the source listing record.
+      - name: host_is_superhost
+        description: Whether the host is designated as a superhost.
+      - name: host_listings_count
+        description: Count of listings declared by the host.
+      - name: host_total_listings_count
+        description: Total listing count declared by the host.
+      - name: calculated_host_listings_count
+        description: Listing count calculated by the source for the host.
+      - name: number_of_reviews
+        description: Lifetime number of reviews for the listing.
+      - name: number_of_reviews_ltm
+        description: Number of reviews in the last twelve months.
+      - name: reviews_per_month
+        description: Average number of reviews received per month.
+      - name: review_scores_rating
+        description: Overall review rating score.
+      - name: review_scores_accuracy
+        description: Review score for listing accuracy.
+      - name: review_scores_cleanliness
+        description: Review score for cleanliness.
+      - name: review_scores_checkin
+        description: Review score for check-in experience.
+      - name: review_scores_communication
+        description: Review score for host communication.
+      - name: review_scores_location
+        description: Review score for location.
+      - name: review_scores_value
+        description: Review score for value.
+      - name: has_reviews
+        description: Binary feature indicating whether the listing has at least one review.
+      - name: amenities_count
+        description: Number of amenities parsed from the source JSON array when valid.
+      - name: log_price
+        description: Natural-log transformed listing price, calculated as ln(1 + price), used as the prediction target.
+        tests:
+          - not_null

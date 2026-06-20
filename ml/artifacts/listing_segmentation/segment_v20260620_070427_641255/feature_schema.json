@@ -1,0 +1,13 @@
+{
+  "features": [
+    "room_type",
+    "property_base_group",
+    "accommodates",
+    "bedrooms",
+    "bathrooms",
+    "beds",
+    "amenities_count",
+    "minimum_nights_log"
+  ],
+  "feature_set_version": "segment_features_v001"
+}
