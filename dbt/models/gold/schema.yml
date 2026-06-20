@@ -157,6 +157,22 @@ models:
         description: Latest listing price from the listing snapshot source.
         tests:
           - positive_or_null
+      - name: estimated_occupancy_l365d
+        description: Estimated occupied days over the trailing 365-day window carried from the listing source.
+        tests:
+          - positive_or_null
+      - name: estimated_revenue_l365d
+        description: Estimated revenue over the trailing 365-day window carried from the listing source.
+        tests:
+          - positive_or_null
+      - name: number_of_reviews_l30d
+        description: Number of reviews observed in the last 30 days from the source listing snapshot.
+        tests:
+          - positive_or_null
+      - name: number_of_reviews_ly
+        description: Number of reviews observed in the prior year from the source listing snapshot.
+        tests:
+          - positive_or_null
       - name: listing_count
         description: Additive count measure fixed to 1 for each listing snapshot row.
         tests:

@@ -38,6 +38,14 @@ models:
               arguments:
                 min_value: 0
                 max_value: 365
+      - name: estimated_occupancy_l365d
+        description: Estimated occupied days over the trailing 365-day window from the source dataset.
+        tests:
+          - positive_or_null
+      - name: estimated_revenue_l365d
+        description: Estimated revenue over the trailing 365-day window from the source dataset.
+        tests:
+          - positive_or_null
       - name: room_type
         description: Airbnb room type.
         tests:
@@ -78,6 +86,14 @@ models:
                 right_column_name: maximum_nights
       - name: maximum_nights
         description: Maximum nights allowed for the listing.
+        tests:
+          - positive_or_null
+      - name: number_of_reviews_l30d
+        description: Number of reviews observed in the last 30 days from the source dataset.
+        tests:
+          - positive_or_null
+      - name: number_of_reviews_ly
+        description: Number of reviews observed in the prior year from the source dataset.
         tests:
           - positive_or_null
 
