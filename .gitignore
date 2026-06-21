@@ -1,6 +1,7 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.tmp.*
 build/
 dist/
 wheels/
@@ -26,6 +27,7 @@ ml/artifacts/
 ml/outputs/
 *.joblib
 *.pkl
+*.log
 
 # dbt artifacts and local DuckDB files
 dbt/target/

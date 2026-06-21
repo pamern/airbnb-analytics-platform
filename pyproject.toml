@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "apache-airflow>=3.2.2",
     "catboost>=1.2.10",
     "dbt-core>=1.11.11",
     "dbt-duckdb>=1.10.1",
