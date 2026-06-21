@@ -144,6 +144,113 @@ def load_pricing_dataset() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
+def load_pricing_insight_context() -> str:
+    """Build a compact text summary for the LLM insight generator."""
+    connection = connect_motherduck(read_only=True)
+    try:
+        overall = query_dataframe(
+            connection,
+            """
+            select
+                count(*) filter (where fact.listing_snapshot_price > 0) as positive_price_listings,
+                median(fact.listing_snapshot_price) filter (where fact.listing_snapshot_price > 0) as median_price,
+                median(fact.estimated_occupancy_l365d / 365.0)
+                    filter (where fact.listing_snapshot_price > 0) as median_occupancy_rate,
+                median(fact.estimated_revenue_l365d)
+                    filter (where fact.listing_snapshot_price > 0) as median_revenue
+            from gold.fact_listing_current_snapshot as fact
+            """,
+        )
+        top_neighbourhoods = query_dataframe(
+            connection,
+            """
+            select
+                coalesce(location_dim.neighbourhood, 'UNKNOWN') as neighbourhood,
+                count(*) as listings,
+                median(fact.listing_snapshot_price) as median_price,
+                median(fact.estimated_occupancy_l365d / 365.0) as median_occupancy_rate,
+                median(fact.estimated_revenue_l365d) as median_revenue
+            from gold.fact_listing_current_snapshot as fact
+            left join gold.dim_location as location_dim
+                on fact.location_key = location_dim.location_key
+            where fact.listing_snapshot_price > 0
+            group by 1
+            having count(*) >= 50
+            order by median_revenue desc
+            limit 5
+            """,
+        )
+        room_type_summary = query_dataframe(
+            connection,
+            """
+            select
+                coalesce(listing_dim.room_type, 'UNKNOWN') as room_type,
+                count(*) as listings,
+                median(fact.listing_snapshot_price) as median_price,
+                median(fact.estimated_occupancy_l365d / 365.0) as median_occupancy_rate,
+                median(fact.estimated_revenue_l365d) as median_revenue
+            from gold.fact_listing_current_snapshot as fact
+            inner join gold.dim_listing as listing_dim
+                on fact.listing_key = listing_dim.listing_key
+            where fact.listing_snapshot_price > 0
+            group by 1
+            order by median_revenue desc
+            """,
+        )
+        review_summary = query_dataframe(
+            connection,
+            """
+            select
+                coalesce(listing_dim.room_type, 'UNKNOWN') as room_type,
+                count(*) as reliable_listings,
+                median(fact.review_scores_rating) as median_review_score
+            from gold.fact_listing_current_snapshot as fact
+            inner join gold.dim_listing as listing_dim
+                on fact.listing_key = listing_dim.listing_key
+            where fact.review_scores_rating is not null
+                and fact.number_of_reviews >= 5
+            group by 1
+            order by median_review_score desc
+            """,
+        )
+    finally:
+        close_connection(connection)
+
+    def table_to_markdown(frame: pd.DataFrame) -> str:
+        if frame.empty:
+            return "No rows available."
+        rounded = frame.copy()
+        for column in rounded.select_dtypes(include=["float"]).columns:
+            rounded[column] = rounded[column].round(2)
+        return rounded.to_markdown(index=False)
+
+    return "\n\n".join(
+        [
+            "## Overall pricing snapshot",
+            f"- Listings with positive price: {overall.at[0, 'positive_price_listings']:,.0f}",
+            f"- Median listed price: {overall.at[0, 'median_price']:,.0f} THB",
+            (
+                "- Median estimated occupancy rate L365D: "
+                f"{overall.at[0, 'median_occupancy_rate']:.2%}"
+            ),
+            (
+                "- Median estimated revenue L365D: "
+                f"{overall.at[0, 'median_revenue']:,.0f} THB"
+            ),
+            "",
+            "## Top neighbourhoods by median estimated revenue",
+            table_to_markdown(top_neighbourhoods),
+            "",
+            "## Room type performance",
+            table_to_markdown(room_type_summary),
+            "",
+            "## Reliable review score by room type",
+            table_to_markdown(review_summary),
+        ]
+    )
+
+
+@st.cache_data(ttl=900, show_spinner=False)
 def load_host_quality_dataset() -> pd.DataFrame:
     """Load the listing-host snapshot dataset used by the host quality page."""
     connection = connect_motherduck(read_only=True)

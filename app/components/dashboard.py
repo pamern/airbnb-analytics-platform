@@ -15,26 +15,26 @@ from components.ui import render_section_intro
 
 def render_dashboard_page() -> None:
     sections = [
-        "Executive Overview",
         "Pricing & Listing Performance",
+        "Executive Overview",
         "Location & Availability Performance",
         "Host & Review Quality",
     ]
     selected_section = st.segmented_control(
         "Dashboard section",
         options=sections,
-        default="Executive Overview",
+        default="Pricing & Listing Performance",
         selection_mode="single",
     )
 
     if selected_section is None:
-        selected_section = "Executive Overview"
+        selected_section = "Pricing & Listing Performance"
 
     render_section_intro(
         selected_section,
         {
             "Executive Overview": "Tong hop nhanh KPI co ban, market pulse, va inventory mix de mo dau dashboard.",
-            "Pricing & Listing Performance": "",
+            "Pricing & Listing Performance": "Phan tich gia niem yet, occupancy uoc tinh, revenue uoc tinh, va watchlist listing theo Gold layer.",
             "Location & Availability Performance": "Theo doi hieu qua theo khu vuc va inventory pressure qua availability.",
             "Host & Review Quality": "Tap trung vao chat luong host, review dimensions, va cac tin hieu anh huong trai nghiem khach.",
         },
