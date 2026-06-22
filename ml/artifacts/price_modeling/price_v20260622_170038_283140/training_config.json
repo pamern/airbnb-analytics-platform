@@ -45,6 +45,8 @@
   "output_root": "D:\\Projects\\Y2026_Sources\\airbnb-analytics-platform\\ml\\outputs\\price_modeling",
   "run_error_analysis": true,
   "run_explainability": true,
+  "shap_sample_size": 1000,
+  "shap_random_state": 42,
   "xgb_n_estimators": 1007,
   "n_jobs": -1
 }
