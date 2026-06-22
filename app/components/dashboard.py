@@ -40,11 +40,19 @@ def render_dashboard_page() -> None:
         },
     )
 
-    if selected_section == "Executive Overview":
-        render_executive_overview()
-    elif selected_section == "Pricing & Listing Performance":
-        render_pricing_listing_performance()
-    elif selected_section == "Location & Availability Performance":
-        render_location_availability_performance()
-    elif selected_section == "Host & Review Quality":
-        render_host_review_quality()
+    _SPINNER_MESSAGES = {
+        "Executive Overview": "Đang tải dữ liệu tổng quan...",
+        "Pricing & Listing Performance": "Đang tải dữ liệu pricing...",
+        "Location & Availability Performance": "Đang tải dữ liệu location...",
+        "Host & Review Quality": "Đang tải dữ liệu host & review...",
+    }
+
+    with st.spinner(_SPINNER_MESSAGES.get(selected_section, "Đang tải dữ liệu...")):
+        if selected_section == "Executive Overview":
+            render_executive_overview()
+        elif selected_section == "Pricing & Listing Performance":
+            render_pricing_listing_performance()
+        elif selected_section == "Location & Availability Performance":
+            render_location_availability_performance()
+        elif selected_section == "Host & Review Quality":
+            render_host_review_quality()
