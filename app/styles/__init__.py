@@ -1,0 +1,1 @@
+"""Shared Streamlit visual foundations."""

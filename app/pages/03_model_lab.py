@@ -5,7 +5,7 @@ from components.ui import render_page_header
 
 
 render_page_header(
-    title="Model Lab",
-    subtitle="Theo dõi artifact model, chạy prediction và chuẩn bị workspace cho cluster/model tiếp theo.",
+    title="Model Performance",
+    subtitle="Track model runs, evaluation metrics, registry status and SHAP explanations",
 )
 render_model_lab_page()

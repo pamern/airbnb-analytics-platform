@@ -1,232 +1,474 @@
-﻿from __future__ import annotations
+"""Read-only Model Performance views for the Streamlit Model Lab."""
 
-from typing import Any
+from __future__ import annotations
 
+from datetime import date, timedelta
+from html import escape
+
+import numpy as np
+import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from components.data import (
-    get_feature_selection_summary,
-    get_price_model_charts,
-    get_price_model_metadata,
-    get_selected_features,
+from components.data import get_price_model_metadata, get_selected_features
+from data_access import load_pricing_dataset
+from services.model_performance_service import (
+    get_cluster_assignments, get_cluster_pca_data, get_cluster_profiles,
+    get_feature_importance, get_metric_trend, get_model_metrics,
+    get_model_registry, get_model_runs, get_price_evaluation_predictions,
+    get_shap_sample_artifact,
 )
-from components.ui import format_number
+from services.price_prediction_service import (
+    get_active_price_champion, get_comparable_listings, get_price_candidates,
+    get_price_model_metrics, predict_single_listing, set_price_champion,
+)
+from styles.design_tokens import DESIGN_TOKENS as T
+
+MODEL_NAMES = {"Price Model": "price_model", "Segmentation Model": "segmentation_model"}
+PRICE_METRICS = {"rmse": "RMSE", "mae": "MAE", "r2": "R²"}
+SEGMENTATION_METRICS = {"silhouette_score": "Silhouette Score", "davies_bouldin_score": "Davies–Bouldin Score", "inertia": "Inertia"}
 
 
-def _render_model_pipeline() -> None:
-    cols = st.columns(4)
-    steps = [
-        ("01", "Feature layer", "Đọc feature từ Gold/listing_features."),
-        ("02", "Evaluate", "So sánh HGB, RandomForest và XGBoost."),
-        ("03", "Select", "Chọn model theo RMSE, MAE, R2 và fit time."),
-        ("04", "Serve", "Gắn artifact vào UI để predict và giải thích."),
-    ]
-    for col, (index, title, body) in zip(cols, steps, strict=True):
-        with col:
-            with st.container(border=True):
-                st.caption(f"Step {index}")
-                st.markdown(f"**{title}**")
-                st.caption(body)
+def _styles() -> None:
+    st.markdown(f"""<style>
+    .section-title{{color:{T['color_text_primary']};font-size:{T['font_size_lg']};font-weight:600;margin-top:{T['space_5']}}}
+    .section-copy{{color:{T['color_text_muted']};font-size:{T['font_size_sm']};margin-bottom:{T['space_3']}}}
+    .badge{{display:inline-block;border-radius:{T['radius_pill']};padding:2px 8px;margin:0 6px 6px 0;font-size:{T['font_size_xs']};font-weight:600;background:{T['color_primary_soft']};color:{T['color_primary']}}}
+    </style>""", unsafe_allow_html=True)
 
 
-def _render_price_model_overview() -> None:
-    metadata = get_price_model_metadata()
-    selected_features = get_selected_features()
-    summary = get_feature_selection_summary()
-
-    st.markdown("### Price prediction")
-    if not metadata:
-        st.warning("Chưa tìm thấy metadata cho price model.")
-        return
-
-    best_metrics = metadata.get("best_model_metrics", {})
-    metric_cols = st.columns(5)
-    metric_cols[0].metric("Best model", metadata.get("best_model_name", "N/A"))
-    metric_cols[1].metric("RMSE", format_number(best_metrics.get("rmse_mean")))
-    metric_cols[2].metric("MAE", format_number(best_metrics.get("mae_mean")))
-    metric_cols[3].metric("R2", format_number(best_metrics.get("r2_mean")))
-    metric_cols[4].metric("Features", selected_features.get("selected_feature_count", "N/A"))
-
-    artifact_ready = metadata.get("model_artifact_saved", False)
-    artifact_label = "✅ Sẵn sàng" if artifact_ready else "⏳ Đang chờ artifact"
-    st.info(
-        f"**Tóm tắt lần chạy** — "
-        f"Target: `{metadata.get('target', 'N/A')}` | "
-        f"Train rows: `{metadata.get('train_rows', 'N/A')}` | "
-        f"Test rows: `{metadata.get('test_rows', 'N/A')}` | "
-        f"Artifact: {artifact_label}"
-    )
-
-    if not summary.empty:
-        chart_data = summary.copy()
-        chart_data["candidate"] = chart_data["model"] + " - " + chart_data["feature_set"]
-        fig = px.bar(
-            chart_data,
-            x="candidate",
-            y="rmse_mean",
-            color="model",
-            text="rmse_mean",
-            color_discrete_sequence=["#0F2742", "#6B7C90", "#D8E0EA"],
-            labels={"candidate": "Candidate", "rmse_mean": "RMSE"},
-        )
-        fig.update_traces(texttemplate="%{text:.3f}", textposition="outside")
-        fig.update_layout(
-            height=380,
-            showlegend=False,
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            xaxis_tickangle=-18,
-            margin=dict(l=10, r=10, t=20, b=40),
-        )
-        st.plotly_chart(fig, width="stretch")
-
-        with st.expander("Xem bảng đánh giá"):
-            st.dataframe(
-                summary[
-                    [
-                        "model",
-                        "feature_set",
-                        "mae_mean",
-                        "rmse_mean",
-                        "r2_mean",
-                        "fit_time_mean",
-                        "predict_time_mean",
-                    ]
-                ],
-                width="stretch",
-                hide_index=True,
-            )
+def _layout(fig: go.Figure, height: int = 330) -> go.Figure:
+    fig.update_layout(height=height, paper_bgcolor=T["color_surface"], plot_bgcolor=T["color_surface"], font={"family": T["font_family"], "color": T["color_text_primary"]}, margin={"l": 20, "r": 20, "t": 40, "b": 20}, hoverlabel={"bgcolor": T["color_surface"], "font_color": T["color_text_primary"]}, legend={"orientation": "h", "y": 1.12})
+    fig.update_xaxes(gridcolor=T["color_border"]); fig.update_yaxes(gridcolor=T["color_border"])
+    return fig
 
 
-def _render_artifact_gallery() -> None:
-    chart_files = get_price_model_charts()
-    if not chart_files:
-        return
+def _section(title: str, copy: str) -> None:
+    st.markdown(f'<div class="section-title">{escape(title)}</div><div class="section-copy">{escape(copy)}</div>', unsafe_allow_html=True)
 
-    st.markdown("### Model artifacts")
-    left, right = st.columns([0.32, 0.68])
+
+def _error(error: str | None) -> bool:
+    if not error:
+        return False
+    if "no shap sample" in error.lower() or "no shap sample artifact" in error.lower(): st.info("No SHAP sample artifact is available for this model version.")
+    elif "does not exist" in error.lower() or "not available" in error.lower() or "not found" in error.lower(): st.info("This table or artifact is not available yet.")
+    else: st.error("Database connection failed or the requested model data could not be loaded.")
+    return True
+
+
+def _number(value: object, digits: int = 3) -> str:
+    numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    return "N/A" if pd.isna(numeric) else f"{numeric:,.{digits}f}"
+
+
+def _badge(value: object) -> str:
+    return f'<span class="badge">{escape(str(value or "UNKNOWN").upper())}</span>'
+
+
+def _filter_bar() -> dict[str, object]:
+    cols = st.columns(5)
+    model_type = cols[0].selectbox("Model", list(MODEL_NAMES), key="model_performance_model_type")
+    model_name = MODEL_NAMES[model_type]
+    registry, _ = get_model_registry(model_name)
+    cols[1].selectbox("Stage", ["All", "CHAMPION", "CANDIDATE", "ARCHIVED"], key="model_performance_stage")
+    stage = st.session_state["model_performance_stage"]
+    versions = ["All"] + (registry["model_version"].dropna().astype(str).drop_duplicates().tolist() if not registry.empty else [])
+    selected_version = cols[2].selectbox("Model Version", versions, key=f"model_performance_version_{model_name}")
+    runs, _ = get_model_runs(model_name, None, None)
+    types = ["All"] + (runs["run_type"].dropna().astype(str).drop_duplicates().tolist() if not runs.empty else [])
+    run_type = cols[3].selectbox("Run Type", types, key=f"model_performance_run_type_{model_name}")
+    selected_dates = cols[4].date_input("Date Range", (date.today() - timedelta(days=90), date.today()), key="model_performance_dates")
+    dates = tuple(selected_dates) if isinstance(selected_dates, tuple) else (selected_dates, selected_dates)
+    return {"model_type": model_type, "model_name": model_name, "stage": stage, "version": None if selected_version == "All" else selected_version, "run_type": None if run_type == "All" else run_type, "date_from": dates[0], "date_to": dates[-1]}
+
+
+def _registry(model_name: str, stage: str) -> pd.DataFrame:
+    values, error = get_model_registry(model_name)
+    if _error(error): return pd.DataFrame()
+    return values if stage == "All" else values[values["stage"].astype(str).str.upper().eq(stage)].copy()
+
+
+def _champion(registry: pd.DataFrame) -> pd.Series | None:
+    if registry.empty: return None
+    values = registry[registry["stage"].astype(str).str.upper().eq("CHAMPION") & registry["is_active"].fillna(False)]
+    return None if values.empty else values.iloc[0]
+
+
+def _version(registry: pd.DataFrame, requested: str | None) -> str | None:
+    if requested: return requested
+    champion = _champion(registry)
+    return str(champion["model_version"]) if champion is not None else (None if registry.empty else str(registry.iloc[0]["model_version"]))
+
+
+def _metric(metrics: pd.DataFrame, key: str, version: str | None, test_only: bool = True) -> object:
+    values = metrics.copy()
+    if version: values = values[values["model_version"].astype(str).eq(version)]
+    if test_only: values = values[values["dataset_split"].astype(str).str.upper().eq("TEST")]
+    values = values[values["metric_name"].astype(str).str.lower().eq(key)]
+    return None if values.empty else values.iloc[0]["metric_value"]
+
+
+def _tables(model_name: str, registry: pd.DataFrame, filters: dict[str, object]) -> None:
+    left, right = st.columns(2)
     with left:
-        chart_names = {chart.name: chart for chart in chart_files}
-        selected_chart = st.selectbox("Chart", list(chart_names))
-        st.caption("Đọc từ ml/outputs/price_modeling/charts.")
+        _section("Model Registry", "Read-only registry records for the selected model.")
+        if registry.empty: st.info("No registry records match the current filters.")
+        else:
+            st.markdown("".join(_badge(v) for v in registry["stage"].dropna().unique()), unsafe_allow_html=True)
+            st.dataframe(registry[["model_version", "stage", "is_active", "created_at", "promoted_at", "promoted_by", "artifact_path"]], use_container_width=True, hide_index=True)
     with right:
-        st.image(str(chart_names[selected_chart]), width="stretch")
+        _section("Recent Runs", "The 10 most recent runs matching the current filters.")
+        runs, error = get_model_runs(model_name, filters["date_from"], filters["date_to"])
+        if _error(error): return
+        if filters["version"]: runs = runs[runs["model_version"].astype(str).eq(str(filters["version"]))]
+        if filters["run_type"]: runs = runs[runs["run_type"].astype(str).eq(str(filters["run_type"]))]
+        if runs.empty: st.info("No runs match the current filters."); return
+        runs = runs.head(10); st.markdown("".join(_badge(v) for v in runs["status"].dropna().unique()), unsafe_allow_html=True)
+        st.dataframe(runs[["run_id", "run_type", "status", "started_at", "completed_at", "artifact_path"]], use_container_width=True, hide_index=True)
+        for _, run in runs[runs["status"].astype(str).str.upper().eq("FAILED") & runs["error_message"].notna()].iterrows():
+            with st.expander(f"Failure details: {run['run_id']}"): st.code(str(run["error_message"]))
 
 
-def _collect_prediction_payload() -> dict[str, Any]:
-    with st.form("price_prediction_form"):
-        st.markdown("#### Listing input")
-        basic_a, basic_b, basic_c = st.columns(3)
-        with basic_a:
-            neighbourhood = st.text_input("Neighbourhood", value="Sukhumvit")
-            room_type = st.selectbox(
-                "Room type",
-                ["Entire home/apt", "Private room", "Hotel room", "Shared room"],
-            )
-        with basic_b:
-            property_base_group = st.selectbox(
-                "Property group", ["Apartment", "House", "Condo", "Hotel", "Other"]
-            )
-            host_response_time = st.selectbox(
-                "Host response time",
-                ["within an hour", "within a few hours", "within a day", "a few days or more"],
-            )
-        with basic_c:
-            has_reviews = st.toggle("Has reviews", value=True)
-            amenities_count = st.number_input("Amenities count", 0, 200, 25)
+def _prediction_frame(predictions: pd.DataFrame, scale: str) -> pd.DataFrame:
+    frame = predictions.copy()
+    frame["raw_residual"] = frame["predicted_price"] - frame["actual_price"]
+    frame["actual_display"] = np.log1p(frame["actual_price"]) if scale == "Log Price" else frame["actual_price"]
+    frame["predicted_display"] = np.log1p(frame["predicted_price"]) if scale == "Log Price" else frame["predicted_price"]
+    return frame
 
-        st.markdown("#### Capacity and policy")
-        cap_a, cap_b, cap_c, cap_d = st.columns(4)
-        with cap_a:
-            accommodates = st.number_input("Accommodates", 1, 20, 2)
-            bedrooms = st.number_input("Bedrooms", 0, 20, 1)
-        with cap_b:
-            bathrooms = st.number_input("Bathrooms", 0.0, 20.0, 1.0, step=0.5)
-            beds = st.number_input("Beds", 0, 30, 1)
-        with cap_c:
-            minimum_nights = st.number_input("Minimum nights", 1, 365, 1)
-            maximum_nights = st.number_input("Maximum nights", 1, 1125, 365)
-        with cap_d:
-            host_acceptance_rate = st.slider("Host acceptance rate", 0, 100, 90)
-            host_response_rate = st.slider("Host response rate", 0, 100, 90)
 
-        submitted = st.form_submit_button("Chạy prediction", width="stretch")
+def _display_limit(frame: pd.DataFrame, display_range: str) -> float | None:
+    if display_range == "All": return None
+    return float(pd.concat([frame["actual_display"], frame["predicted_display"]]).quantile(0.95 if display_range == "P95" else 0.99))
 
-    payload = {
-        "neighbourhood": neighbourhood,
-        "room_type": room_type,
-        "property_base_group": property_base_group,
-        "host_response_time": host_response_time,
-        "accommodates": accommodates,
-        "bedrooms": bedrooms,
-        "bathrooms": bathrooms,
-        "beds": beds,
-        "minimum_nights": minimum_nights,
-        "maximum_nights": maximum_nights,
-        "amenities_count": amenities_count,
-        "has_reviews": has_reviews,
-        "host_acceptance_rate": host_acceptance_rate,
-        "host_response_rate": host_response_rate,
+
+def _price_diagnostics(frame: pd.DataFrame) -> None:
+    residual = frame["raw_residual"]
+    cols = st.columns(3)
+    cols[0].metric("Underprediction Rate", f"{(residual < 0).mean():.1%}")
+    cols[1].metric("Median Residual", _number(residual.median()))
+    cols[2].metric("P90 Absolute Error", _number(residual.abs().quantile(0.90)))
+
+
+def _price_scatter_and_residual(predictions: pd.DataFrame, version: str | None) -> None:
+    controls = st.columns(3)
+    scale = controls[0].selectbox("Display Scale", ["Log Price", "Raw Price"], key="price_display_scale")
+    display_range = controls[1].selectbox("Display Range", ["P95", "P99", "All"], index=1, key="price_display_range")
+    residual_scale = controls[2].selectbox("Residual Scale", ["Raw Residual", "Log Residual"], key="price_residual_scale")
+    frame = _prediction_frame(predictions, scale); limit = _display_limit(frame, display_range)
+    visible = frame if limit is None else frame[(frame["actual_display"] <= limit) & (frame["predicted_display"] <= limit)]
+    outside = len(frame) - len(visible)
+    left, right = st.columns(2)
+    with left:
+        _section("Predicted vs Actual", "Display limits affect only the visible chart; all evaluation rows remain in diagnostics.")
+        st.caption(f"Showing {len(visible):,} of {len(frame):,} points; {outside:,} outlier(s) are outside the display range.")
+        labels = {"actual_display": f"Actual {'Log Price' if scale == 'Log Price' else 'Price'}", "predicted_display": f"Predicted {'Log Price' if scale == 'Log Price' else 'Price'}"}
+        fig = px.scatter(visible, x="actual_display", y="predicted_display", hover_data=["listing_id", "actual_price", "predicted_price", "prediction_error", "model_version"], labels=labels, color_discrete_sequence=[T["chart_primary"]])
+        maximum = limit if limit is not None else max(frame["actual_display"].max(), frame["predicted_display"].max())
+        fig.add_trace(go.Scatter(x=[0, maximum], y=[0, maximum], mode="lines", name="y = x", line={"color": T["chart_reference"], "dash": "dash"}))
+        st.plotly_chart(_layout(fig), use_container_width=True)
+        high = frame[frame["actual_price"] >= frame["actual_price"].quantile(0.90)]
+        if not high.empty and (high["raw_residual"] < 0).mean() > 0.5: st.warning("The model tends to underpredict extreme high-price listings.")
+    with right:
+        _section("Residual Distribution", "Negative residual means underprediction. Positive residual means overprediction.")
+        residual = frame["raw_residual"] if residual_scale == "Raw Residual" else np.log1p(frame["predicted_price"]) - np.log1p(frame["actual_price"])
+        hist_limit = residual.abs().quantile(0.99); visible_residual = residual[residual.abs() <= hist_limit]
+        fig = px.histogram(x=visible_residual, nbins=35, labels={"x": residual_scale}, color_discrete_sequence=[T["chart_secondary"]])
+        fig.add_vline(x=0, line_dash="dash", line_color=T["chart_reference"]); fig.add_vline(x=float(residual.median()), line_dash="dot", line_color=T["chart_danger"], annotation_text="Median")
+        st.plotly_chart(_layout(fig), use_container_width=True)
+        st.caption(f"Histogram displays the central 99% of residuals; metrics use all {len(residual):,} rows.")
+    _price_diagnostics(frame)
+
+
+def _error_by_band(predictions: pd.DataFrame) -> None:
+    _section("Error by Price Band", "Quantile-based actual-price bands reveal where price error changes.")
+    frame = predictions.copy(); frame["absolute_error"] = (frame["predicted_price"] - frame["actual_price"]).abs(); frame["underprediction"] = frame["predicted_price"] < frame["actual_price"]
+    labels = ["Low", "Mid", "High", "Premium", "Extreme"]
+    try: frame["price_band"] = pd.qcut(frame["actual_price"], q=5, labels=labels, duplicates="drop")
+    except ValueError: st.info("Not enough distinct actual prices to create price bands."); return
+    summary = frame.groupby("price_band", observed=True).agg(MAE=("absolute_error", "mean"), Median_Absolute_Error=("absolute_error", "median"), Underprediction_Rate=("underprediction", "mean"), Sample_Count=("listing_id", "size")).reset_index()
+    fig = px.bar(summary, x="price_band", y="MAE", text="Sample_Count", color_discrete_sequence=[T["chart_primary"]]); st.plotly_chart(_layout(fig), use_container_width=True)
+    st.dataframe(summary.assign(Underprediction_Rate=lambda x: x["Underprediction_Rate"].map("{:.1%}".format)), use_container_width=True, hide_index=True)
+
+
+def _metric_trend(filters: dict[str, object]) -> None:
+    _section("Metric Trend", "TEST metrics from successful Price Model runs.")
+    trend, error = get_metric_trend("price_model", filters["date_from"], filters["date_to"])
+    if _error(error) or trend.empty: return
+    trend = trend[trend["dataset_split"].astype(str).str.upper().eq("TEST")]
+    if trend.empty: st.info("No successful TEST runs match the selected date range."); return
+    selected = st.multiselect("Metrics", list(PRICE_METRICS.values()), default=list(PRICE_METRICS.values()), key="price_metric_trend")
+    keys = [key for key, label in PRICE_METRICS.items() if label in selected]; trend = trend[trend["metric_name"].astype(str).str.lower().isin(keys)]
+    if not trend.empty: st.plotly_chart(_layout(px.line(trend, x="started_at", y="metric_value", color="metric_name", markers=True, color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"]])), use_container_width=True)
+
+
+def _normalise_shap(frame: pd.DataFrame, allowed: list[str]) -> pd.DataFrame:
+    columns = {str(column).lower(): column for column in frame.columns}
+    feature = columns.get("feature_name") or columns.get("source_feature")
+    shap = columns.get("shap_value")
+    value = columns.get("feature_value")
+    if not feature or not shap: return pd.DataFrame()
+    result = frame.rename(columns={feature: "feature_name", shap: "shap_value"}).copy()
+    result["feature_value"] = result[value] if value else None
+    result = result[result["feature_name"].astype(str).isin(allowed)].dropna(subset=["shap_value"])
+    return result
+
+
+def _shap_views(version: str | None) -> None:
+    importance, importance_error = get_feature_importance(version)
+    _section("Global SHAP Feature Importance", "Mean absolute SHAP value on the evaluation sample. SHAP values explain predictions on the log-price scale.")
+    if _error(importance_error): return
+    if importance.empty: st.info("No SHAP feature importance is available for this model version."); return
+    top = importance.head(15); st.plotly_chart(_layout(px.bar(top.sort_values("importance_value"), x="importance_value", y="feature_name", orientation="h", color_discrete_sequence=[T["chart_primary"]])), use_container_width=True)
+    raw, artifact_error = get_shap_sample_artifact(version)
+    _section("SHAP Impact Overview", "Positive SHAP values push the predicted log-price upward. Negative values push it downward.")
+    if _error(artifact_error): return
+    shap = _normalise_shap(raw, top["feature_name"].astype(str).tolist())
+    if shap.empty: st.info("The SHAP sample artifact does not contain the fields needed for impact views."); return
+    numeric_color = pd.to_numeric(shap["feature_value"], errors="coerce")
+    fig = px.strip(shap, x="shap_value", y="feature_name", color=numeric_color if numeric_color.notna().any() else None, hover_data=["feature_value"], color_continuous_scale=[T["color_primary_soft"], T["chart_primary"]])
+    fig.add_vline(x=0, line_color=T["chart_reference"], line_dash="dash"); st.plotly_chart(_layout(fig, 420), use_container_width=True)
+    features = shap["feature_name"].drop_duplicates().tolist(); selected = st.selectbox("Feature to explain", features, key="shap_dependence_feature")
+    subset = shap[shap["feature_name"].eq(selected)].copy(); values = pd.to_numeric(subset["feature_value"], errors="coerce")
+    _section("SHAP Dependence Plot", "Relationship between source feature values and SHAP impact on the log-price prediction.")
+    if values.notna().mean() > 0.8:
+        fig = px.scatter(subset.assign(feature_value_numeric=values), x="feature_value_numeric", y="shap_value", color_discrete_sequence=[T["chart_primary"]]); fig.add_hline(y=0, line_color=T["chart_reference"], line_dash="dash"); st.plotly_chart(_layout(fig), use_container_width=True)
+    else:
+        grouped = subset.groupby("feature_value", dropna=False).agg(Mean_SHAP=("shap_value", "mean"), Median_SHAP=("shap_value", "median"), Sample_Count=("shap_value", "size")).reset_index(); st.dataframe(grouped, use_container_width=True, hide_index=True)
+    summary = shap.groupby("feature_name").agg(**{"Mean |SHAP|": ("shap_value", lambda series: series.abs().mean()), "Mean SHAP": ("shap_value", "mean"), "Positive Impact Rate": ("shap_value", lambda series: (series > 0).mean()), "Negative Impact Rate": ("shap_value", lambda series: (series < 0).mean()), "Sample Count": ("shap_value", "size")}).reset_index().sort_values("Mean |SHAP|", ascending=False)
+    _section("SHAP Direction Summary", "Ranked by Mean |SHAP|. All SHAP values are on the log-price scale.")
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+
+
+def _price_model(filters: dict[str, object]) -> None:
+    registry = _registry("price_model", str(filters["stage"])); version = _version(registry, filters["version"]); current = {**filters, "version": version}; champion = _champion(registry)
+    metrics, metric_error = get_model_metrics("price_model", version); cols = st.columns(5)
+    cols[0].metric("Active Champion", str(champion["model_version"]) if champion is not None else "No Champion")
+    for col, (key, label) in zip(cols[1:4], PRICE_METRICS.items(), strict=True): col.metric(f"{label} — TEST", _number(_metric(metrics, key, version)))
+    cols[4].metric("Model Version", version or "N/A")
+    if champion is None: st.warning("No active Price Model Champion is available.")
+    _error(metric_error)
+    predictions, prediction_error = get_price_evaluation_predictions(version)
+    if not _error(prediction_error):
+        if predictions.empty: st.info("No evaluation predictions are available for this model version.")
+        else: _price_scatter_and_residual(predictions, version); _error_by_band(predictions)
+    _metric_trend(current); _shap_views(version); _tables("price_model", registry, current)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _pca_projection(frame: pd.DataFrame) -> tuple[pd.DataFrame, tuple[float, float], str | None]:
+    if frame.empty: return pd.DataFrame(), (0.0, 0.0), "No assignment-feature rows are available."
+    frame = frame.head(2500).copy(); feature_columns = [column for column in frame if column.startswith("feature__")]
+    if not feature_columns: return pd.DataFrame(), (0.0, 0.0), "No clustering feature columns are available."
+    values = frame[feature_columns]; numeric = values.select_dtypes(include="number").columns.tolist(); categorical = [column for column in values if column not in numeric]
+    transformers = []
+    if numeric: transformers.append(("numeric", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), numeric))
+    if categorical: transformers.append(("categorical", make_pipeline(SimpleImputer(strategy="most_frequent"), OneHotEncoder(handle_unknown="ignore")), categorical))
+    if not transformers: return pd.DataFrame(), (0.0, 0.0), "No usable numeric or categorical clustering features are available."
+    try:
+        transformed = ColumnTransformer(transformers).fit_transform(values)
+        coordinates = PCA(n_components=2, random_state=42).fit_transform(transformed.toarray() if hasattr(transformed, "toarray") else transformed)
+        frame["PCA Component 1"], frame["PCA Component 2"] = coordinates[:, 0], coordinates[:, 1]
+        variance = PCA(n_components=2, random_state=42).fit(transformed.toarray() if hasattr(transformed, "toarray") else transformed).explained_variance_ratio_
+        return frame, (float(variance[0]), float(variance[1])), None
+    except Exception:
+        return pd.DataFrame(), (0.0, 0.0), "PCA visualization could not be computed from the available feature data."
+
+
+def _segmentation_model(filters: dict[str, object]) -> None:
+    registry = _registry("segmentation_model", str(filters["stage"])); version = _version(registry, filters["version"]); current = {**filters, "version": version}; champion = _champion(registry)
+    metrics, metric_error = get_model_metrics("segmentation_model", version); profiles, profile_error = get_cluster_profiles(version); cols = st.columns(5)
+    cols[0].metric("Active Champion", str(champion["model_version"]) if champion is not None else "No Champion")
+    for col, (key, label) in zip(cols[1:4], SEGMENTATION_METRICS.items(), strict=True): col.metric(label, _number(_metric(metrics, key, version, test_only=False)))
+    cols[4].metric("Number of Clusters", _number(profiles["cluster_id"].nunique(), 0) if "cluster_id" in profiles else "N/A")
+    if champion is None: st.warning("No active Segmentation Model Champion is available.")
+    _error(metric_error); _error(profile_error)
+    _section("PCA Cluster Projection", "PCA is used only for two-dimensional visualization. Cluster assignments come from the persisted KMeans model.")
+    pca_source, pca_error = get_cluster_pca_data(version)
+    if not _error(pca_error):
+        projection, variance, projection_error = _pca_projection(pca_source)
+        if _error(projection_error): pass
+        elif projection.empty: st.info("No PCA projection data is available for this model version.")
+        else:
+            st.caption(f"Explained variance PC1: {variance[0]:.1%} · PC2: {variance[1]:.1%} · displaying up to 2,500 listings.")
+            hover = [column for column in ("listing_id", "cluster_id", "cluster_name", "distance_to_centroid") if column in projection]
+            st.plotly_chart(_layout(px.scatter(projection, x="PCA Component 1", y="PCA Component 2", color="cluster_id", hover_data=hover, color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"], T["chart_danger"], T["color_info"]])), use_container_width=True)
+    assignments, assignment_error = get_cluster_assignments(version); trend, trend_error = get_metric_trend("segmentation_model", current["date_from"], current["date_to"]); left, right = st.columns(2)
+    with left:
+        _section("Cluster Distribution", "Listing counts by cluster for the selected model version.")
+        if not _error(assignment_error) and not assignments.empty: st.plotly_chart(_layout(px.bar(assignments, x="cluster_id", y="listing_count", color_discrete_sequence=[T["chart_primary"]])), use_container_width=True)
+        elif not assignment_error: st.info("No cluster assignments are available for this model version.")
+    with right:
+        _section("Segmentation Metric Trend", "Metrics from successful segmentation runs.")
+        if not _error(trend_error) and not trend.empty:
+            trend = trend[trend["metric_name"].astype(str).str.lower().isin(SEGMENTATION_METRICS)]
+            if trend.empty: st.info("No successful runs are available for the selected date range.")
+            else: st.plotly_chart(_layout(px.line(trend, x="started_at", y="metric_value", color="metric_name", markers=True, color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"]])), use_container_width=True)
+    _section("Cluster Profiles", "Available profile fields are read directly from the Gold table.")
+    if not _error(profile_error): st.dataframe(profiles, use_container_width=True, hide_index=True) if not profiles.empty else st.info("No cluster profiles are available for this model version.")
+    _tables("segmentation_model", registry, current)
+
+
+def _performance() -> None:
+    _styles(); filters = _filter_bar()
+    if filters["model_type"] == "Price Model": _price_model(filters)
+    else: _segmentation_model(filters)
+
+
+def _prediction_options() -> dict[str, list[str]]:
+    """Reuse the dashboard's cached market dataset for categorical selector values."""
+    try:
+        dataset = load_pricing_dataset()
+    except Exception:
+        dataset = pd.DataFrame()
+    def values(column: str) -> list[str]:
+        if column not in dataset: return ["No options available"]
+        options = sorted(dataset[column].dropna().astype(str).loc[lambda series: series.str.strip().ne("")].unique().tolist())
+        return options or ["No options available"]
+    return {
+        "neighbourhood": values("neighbourhood"),
+        "room_type": values("room_type"),
+        "property_base_group": values("property_type"),
+        # This is the existing canonical response-time taxonomy already used by Model Lab.
+        "host_response_time": ["within an hour", "within a few hours", "within a day", "a few days or more"],
     }
-    return payload if submitted else {}
 
 
-def _render_prediction_runner() -> None:
-    metadata = get_price_model_metadata()
-    selected_features = get_selected_features()
+def _prediction_inputs(selected: set[str]) -> tuple[dict[str, object], bool, bool]:
+    """Render only fields used by the persisted price-model feature schema."""
+    with st.form("price_prediction_form", clear_on_submit=True):
+        st.markdown("#### Listing Inputs")
+        values: dict[str, object] = {}
+        options = _prediction_options()
+        def show(name: str) -> bool: return name in selected
+        if any(show(v) for v in ("neighbourhood", "room_type", "property_base_group")):
+            st.caption("Location"); cols = st.columns(3)
+            if show("neighbourhood"): values["neighbourhood"] = cols[0].selectbox("Neighbourhood", options["neighbourhood"])
+            if show("room_type"): values["room_type"] = cols[1].selectbox("Room Type", options["room_type"])
+            if show("property_base_group"): values["property_base_group"] = cols[2].selectbox("Property Group", options["property_base_group"])
+        capacity = ["accommodates", "bedrooms", "bathrooms", "beds"]
+        if any(show(v) for v in capacity):
+            st.caption("Capacity & Space"); cols = st.columns(4)
+            for col, name in zip(cols, capacity, strict=True):
+                if show(name): values[name] = col.number_input(name.replace("_", " ").title(), min_value=0.0 if name == "bathrooms" else 0, value=1.0 if name == "bathrooms" else 1)
+        booking = ["minimum_nights", "maximum_nights", "instant_bookable"]
+        if any(show(v) for v in booking):
+            st.caption("Booking Rules"); cols = st.columns(3)
+            if show("minimum_nights"): values["minimum_nights"] = cols[0].number_input("Minimum Nights", min_value=1, value=1)
+            if show("maximum_nights"): values["maximum_nights"] = cols[1].number_input("Maximum Nights", min_value=1, value=365)
+            if show("instant_bookable"): values["instant_bookable"] = cols[2].toggle("Instant Bookable", value=False)
+        host = ["host_response_time", "host_response_rate", "host_acceptance_rate", "host_listings_count", "host_total_listings_count", "calculated_host_listings_count"]
+        if any(show(v) for v in host):
+            st.caption("Host Information"); cols = st.columns(3)
+            if show("host_response_time"): values["host_response_time"] = cols[0].selectbox("Host Response Time", options["host_response_time"])
+            for index, name in enumerate(host[1:], start=1):
+                if show(name): values[name] = cols[index % 3].number_input(name.replace("_", " ").title(), min_value=0.0, value=0.0 if "rate" not in name else 0.5, max_value=1.0 if "rate" in name else None)
+        availability = ["availability_30", "availability_60", "availability_90", "availability_365"]
+        if any(show(v) for v in availability):
+            st.caption("Availability"); cols = st.columns(4)
+            for col, name in zip(cols, availability, strict=True):
+                if show(name): values[name] = col.number_input(name.replace("_", " ").title(), min_value=0, value=0)
+        if show("host_is_superhost"):
+            values["host_is_superhost"] = st.toggle("Superhost", value=False)
+        review = ["amenities_count", "reviews_per_month", "number_of_reviews", "number_of_reviews_ltm", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", "review_scores_checkin", "review_scores_communication", "review_scores_location", "review_scores_value", "has_reviews"]
+        if any(show(v) for v in review):
+            st.caption("Reviews & Amenities"); cols = st.columns(3)
+            for index, name in enumerate(review):
+                if show(name):
+                    if name == "has_reviews": values[name] = cols[index % 3].toggle("Has Reviews", value=True)
+                    else: values[name] = cols[index % 3].number_input(name.replace("_", " ").title(), min_value=0.0, value=0.0)
+        reset, predict = st.columns(2)
+        reset_pressed = reset.form_submit_button("Reset Inputs")
+        predict_pressed = predict.form_submit_button("Predict Price", type="primary")
+    return values, reset_pressed, predict_pressed
 
-    st.markdown("### Run price model")
-    if not metadata.get("model_artifact_saved", False):
-        st.info(
-            "Notebook hiện chưa lưu model artifact. Form này đã sẵn sàng để gắn inference "
-            "khi có file model trong ml/outputs/price_modeling/models."
-        )
 
-    payload = _collect_prediction_payload()
-    if payload:
-        st.warning("Chưa có model artifact để predict thật. Đây là payload UI đã tạo.")
-        st.json(payload)
-
-    with st.expander("Selected features từ notebook"):
-        st.write(selected_features.get("selected_features", []))
+def _champion_card(champion: pd.Series | None) -> None:
+    _section("Model Champion", "The active Price Model is the only model eligible for prediction.")
+    if champion is None: st.error("No single active Price Model Champion is available. Prediction is disabled."); return
+    metrics, error = get_price_model_metrics(str(champion["model_version"]))
+    if _error(error): return
+    cols = st.columns(3); cols[0].metric("Model Version", str(champion["model_version"])); cols[1].metric("Stage", str(champion["stage"])); cols[2].metric("Created At", str(champion.get("created_at", "N/A")))
+    metric_cols = st.columns(3)
+    for col, (key, label) in zip(metric_cols, PRICE_METRICS.items(), strict=True): col.metric(label, _number(_metric(metrics, key, str(champion["model_version"]))))
 
 
-def _render_cluster_workspace() -> None:
-    left, right = st.columns([1.25, 1])
+def _market_views(predicted_price: float, inputs: dict[str, object]) -> None:
+    comparable, error = get_comparable_listings(inputs)
+    _section("Comparable Listings", "Comparable listings use the same neighbourhood and room type with similar capacity.")
+    if _error(error) or comparable.empty:
+        if not error: st.info("No comparable listings are available for the selected input.")
+        return
+    st.dataframe(comparable, use_container_width=True, hide_index=True)
+    reference = comparable["actual_price"].dropna()
+    if len(reference) < 5: st.info("Insufficient market data for a reliable market position."); return
+    percentile = float((reference <= predicted_price).mean()); position = "Above Median" if predicted_price > reference.median() else "At or Below Median"
+    cols = st.columns(2); cols[0].metric("Price Percentile", f"{percentile:.0%}"); cols[1].metric("Market Position", position)
+    _section("Price Position vs Market", "Reference group: same neighbourhood and room type with similar capacity.")
+    fig = go.Figure(go.Box(x=reference, orientation="h", name="Comparable listings", marker_color=T["chart_primary"]))
+    fig.add_vline(x=predicted_price, line_color=T["chart_danger"], line_width=3, annotation_text="Predicted price")
+    st.plotly_chart(_layout(fig, 220), use_container_width=True)
+
+
+def _promotion_controls() -> None:
+    candidates, error = get_price_candidates()
+    if _error(error): return
+    _section("Champion Management", "Promotion is explicit and affects only the Price Model registry.")
+    if candidates.empty: st.info("Candidate list is empty."); return
+    candidate = st.selectbox("Select Candidate Version", candidates["model_version"].astype(str).tolist(), key="price_candidate_version")
+    confirm = st.checkbox("The current Champion will be archived and the selected Candidate will become active.", key="price_promotion_confirmation")
+    if st.button("Set as Champion", type="primary", disabled=not confirm, key="set_price_champion"):
+        error = set_price_champion(candidate)
+        if error: st.error(error)
+        else: st.success(f"{candidate} is now the active Price Model Champion."); st.rerun()
+
+
+def _prediction_runner() -> None:
+    selected = set(get_selected_features().get("selected_features", []))
+    champion, champion_error = get_active_price_champion()
+    left, right = st.columns([0.95, 1.65], gap="large")
     with left:
-        st.info(
-            "**Cluster workspace** — Chỗ cho KMeans/DBSCAN/segmentation. "
-            "Sẽ hiển thị scatter/map, số cụm, silhouette score và mô tả từng segment."
-        )
+        inputs, reset, predict = _prediction_inputs(selected)
+        if reset: st.session_state.pop("price_prediction_result", None); st.rerun()
     with right:
-        metric_cols = st.columns(2)
-        metric_cols[0].metric("Cluster count", "TBD")
-        metric_cols[1].metric("Silhouette", "TBD")
-        st.metric("Primary segment", "TBD")
-
-
-def _render_future_model_workspace() -> None:
-    st.info(
-        "**Workspace cho model tiếp theo** — Form input, bảng evaluation, "
-        "chart output hoặc phần giải thích bằng AI."
-    )
+        _champion_card(champion)
+        if champion_error: st.error(champion_error)
+        if predict and champion is not None:
+            required = [name for name in ("neighbourhood", "room_type", "property_base_group") if name in selected]
+            validation = not all(str(inputs.get(name, "")).strip() for name in required) or inputs.get("maximum_nights", 1) < inputs.get("minimum_nights", 1)
+            if validation: st.error("Complete required categorical fields and ensure maximum nights is not below minimum nights.")
+            else:
+                price, error = predict_single_listing(inputs, champion)
+                if error: st.error(error)
+                else: st.session_state["price_prediction_result"] = {"price": price, "version": str(champion["model_version"]), "inputs": inputs, "time": pd.Timestamp.now()}
+        result = st.session_state.get("price_prediction_result")
+        if result:
+            _section("Prediction Result", "Estimated nightly price from the active Champion artifact.")
+            result_cols = st.columns(3)
+            result_cols[0].metric("Predicted Nightly Price", _number(result["price"], 2))
+            result_cols[1].metric("Suggested Range", "Not available")
+            result_cols[2].metric("Confidence", "Not available")
+            st.caption("No persisted prediction interval or confidence rule is configured for this Champion.")
+            _section("Top Drivers", "Local SHAP explanation is unavailable unless the Champion artifact includes a compatible explainer.")
+            st.info("SHAP explanation unavailable for this prediction.")
+            _market_views(float(result["price"]), result["inputs"])
+            _section("Prediction Notes", "Rule-based notes only use available model and market data.")
+            st.info("Prediction notes will appear when local SHAP or sufficient comparable-market data is available.")
+            history = st.session_state.setdefault("recent_price_predictions", []); history.insert(0, {"Time": result["time"], "Model Version": result["version"], "Predicted Price": result["price"], "Neighbourhood": result["inputs"].get("neighbourhood"), "Room Type": result["inputs"].get("room_type")})
+            _section("Recent Predictions", "Session-only history; no predictions are written to the warehouse.")
+            st.dataframe(pd.DataFrame(history[:10]), use_container_width=True, hide_index=True)
+        _promotion_controls()
 
 
 def render_model_lab_page() -> None:
-    _render_model_pipeline()
-    st.divider()
-
-    overview_tab, run_tab, cluster_tab, future_tab = st.tabs(
-        ["Tổng quan", "Chạy dự báo", "Cluster", "Model 3"]
-    )
-    with overview_tab:
-        _render_price_model_overview()
-        _render_artifact_gallery()
-    with run_tab:
-        _render_prediction_runner()
-    with cluster_tab:
-        _render_cluster_workspace()
-    with future_tab:
-        _render_future_model_workspace()
-
+    performance_tab, run_tab, cluster_tab, future_tab = st.tabs(["Model Performance", "Price Prediction", "Cluster", "Model 3"])
+    with performance_tab: _performance()
+    with run_tab: _prediction_runner()
+    with cluster_tab: st.info("Cluster exploration workspace. Use Model Performance to review registered segmentation results.")
+    with future_tab: st.info("Workspace reserved for a future model.")

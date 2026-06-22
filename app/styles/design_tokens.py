@@ -1,0 +1,25 @@
+"""Single source of visual tokens for the Streamlit application."""
+
+DESIGN_TOKENS = {
+    "color_bg": "#F7F9FC", "color_surface": "#FFFFFF", "color_surface_subtle": "#F8FAFC",
+    "color_surface_hover": "#F1F5F9", "color_text_primary": "#0F172A",
+    "color_text_secondary": "#475569", "color_text_muted": "#64748B",
+    "color_text_inverse": "#FFFFFF", "color_border": "#E2E8F0",
+    "color_border_strong": "#CBD5E1", "color_primary": "#4F8EF7",
+    "color_primary_hover": "#3B7BE5", "color_primary_soft": "#EAF2FF",
+    "color_success": "#22C55E", "color_success_soft": "#DCFCE7",
+    "color_warning": "#F59E0B", "color_warning_soft": "#FEF3C7",
+    "color_danger": "#EF4444", "color_danger_soft": "#FEE2E2",
+    "color_info": "#6366F1", "color_info_soft": "#EEF2FF",
+    "chart_primary": "#4F8EF7", "chart_secondary": "#F59E0B",
+    "chart_success": "#22C55E", "chart_danger": "#EF4444",
+    "chart_neutral": "#94A3B8", "chart_reference": "#64748B",
+    "font_family": "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    "font_size_xs": "0.75rem", "font_size_sm": "0.875rem", "font_size_md": "1rem",
+    "font_size_lg": "1.125rem", "font_size_xl": "1.5rem", "font_size_2xl": "2rem",
+    "radius_sm": "6px", "radius_md": "10px", "radius_lg": "14px", "radius_pill": "999px",
+    "space_1": "4px", "space_2": "8px", "space_3": "12px", "space_4": "16px",
+    "space_5": "20px", "space_6": "24px", "space_8": "32px",
+    "shadow_sm": "0 1px 2px rgba(15, 23, 42, 0.05)",
+    "shadow_md": "0 4px 14px rgba(15, 23, 42, 0.06)",
+}
