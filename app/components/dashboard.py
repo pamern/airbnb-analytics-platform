@@ -10,41 +10,34 @@ from components.location_availability_performance import (
 from components.pricing_listing_performance import (
     render_pricing_listing_performance,
 )
-from components.ui import render_section_intro
 
 
 def render_dashboard_page() -> None:
-    sections = [
-        "Executive Overview",
-        "Pricing & Listing Performance",
-        "Location & Availability Performance",
-        "Host & Review Quality",
-    ]
+    sections = {
+        "Market Overview": "Market Overview",
+        "Pricing & Performance": "Pricing & Listing Performance",
+        "Location & Availability": "Location & Forward Availability",
+        "Host & Review Quality": "Host & Review Quality",
+    }
     selected_section = st.segmented_control(
         "Dashboard section",
-        options=sections,
-        default="Executive Overview",
+        options=list(sections.keys()),
+        default="Market Overview",
         selection_mode="single",
+        width="stretch",
+        key="dashboard_section",
     )
 
     if selected_section is None:
-        selected_section = "Executive Overview"
+        selected_section = "Market Overview"
 
-    render_section_intro(
-        selected_section,
-        {
-            "Executive Overview": "Tong hop nhanh KPI co ban, market pulse, va inventory mix de mo dau dashboard.",
-            "Pricing & Listing Performance": "",
-            "Location & Availability Performance": "Theo doi hieu qua theo khu vuc va inventory pressure qua availability.",
-            "Host & Review Quality": "Tap trung vao chat luong host, review dimensions, va cac tin hieu anh huong trai nghiem khach.",
-        },
-    )
+    target_section = sections[selected_section]
 
-    if selected_section == "Executive Overview":
+    if target_section == "Market Overview":
         render_executive_overview()
-    elif selected_section == "Pricing & Listing Performance":
+    elif target_section == "Pricing & Listing Performance":
         render_pricing_listing_performance()
-    elif selected_section == "Location & Availability Performance":
+    elif target_section == "Location & Forward Availability":
         render_location_availability_performance()
-    elif selected_section == "Host & Review Quality":
+    elif target_section == "Host & Review Quality":
         render_host_review_quality()
