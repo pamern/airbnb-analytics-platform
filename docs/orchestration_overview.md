@@ -10,7 +10,7 @@ Entry point:
 uv run dagster dev -m orchestration.definitions
 ```
 
-Hệ thống có bốn job chạy thủ công. Chưa có schedule hoặc sensor.
+Hệ thống có bảy job chạy thủ công. Chưa có schedule hoặc sensor.
 
 ## Luồng dữ liệu
 
@@ -158,10 +158,13 @@ Sau evaluation, price retraining lấy mẫu reproducible tối đa 1.000 dòng 
 
 | Job | Flow |
 | --- | --- |
+| `bronze_ingestion_job` | Validate năm raw source bắt buộc (gồm GeoJSON) → load/recreate bốn Bronze table từ CSV → log row count. Không chạy dbt hay ML. |
+| `dbt_analytics_build_job` | Materialize toàn bộ dbt Silver/Gold model và test đi kèm, gồm dashboard marts và hai ML feature table. Không train hoặc inference. |
 | `price_retraining_job` | dbt price feature → retrain/evaluate → artifact validation → MLOps Candidate/metrics/importance → evaluation predictions. |
 | `segmentation_retraining_job` | dbt cluster feature → KMeans train/evaluate → artifact validation → MLOps Candidate/metrics → assignments và profiles. |
 | `price_prediction_job` | dbt price feature → active Price Champion → candidate query → tối đa 100 batch predictions → Gold output + run status. |
 | `segmentation_assignment_job` | dbt cluster feature → active Segmentation Champion → candidate query → tối đa 100 assignments → Gold output + run status. |
+| `data_refresh_job` | Bronze ingestion → dbt Silver/Gold analytics → Price Champion inference → Segmentation Champion assignment. Không retrain, register hay promote model. |
 
 ## Asset checks
 
@@ -186,7 +189,7 @@ Trước khi chạy inference, xác nhận mỗi `model_name` chỉ có một re
 # Build feature models sau khi Bronze/Silver đã tồn tại trong database target
 uv run dbt build --project-dir dbt --profiles-dir dbt --target local --select +gold_price_model_features +gold_cluster_model_features
 
-# Mở Dagster UI và chạy một trong bốn job
+# Mở Dagster UI và chạy một trong bảy job
 uv run dagster dev -m orchestration.definitions
 
 # Unit test registry selection, candidate SQL và Dagster topology
