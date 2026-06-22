@@ -11,6 +11,7 @@ from components.data import (
     get_price_model_metadata,
     get_selected_features,
 )
+from components.model3_kmeans import render_model3_kmeans_page
 from components.ui import format_number
 
 
@@ -207,10 +208,7 @@ def _render_cluster_workspace() -> None:
 
 
 def _render_future_model_workspace() -> None:
-    st.info(
-        "**Workspace cho model tiếp theo** — Form input, bảng evaluation, "
-        "chart output hoặc phần giải thích bằng AI."
-    )
+    render_model3_kmeans_page()
 
 
 def render_model_lab_page() -> None:

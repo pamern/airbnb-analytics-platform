@@ -95,6 +95,17 @@ left join silver.silver_reviews as silver_review
     on review_fact.review_id = silver_review.review_id
 """
 
+MODEL3_DROPDOWN_OPTIONS_SQL = """
+select
+    neighbourhood,
+    room_type,
+    property_type
+from silver.silver_listings
+where neighbourhood is not null
+   or room_type is not null
+   or property_type is not null
+"""
+
 
 @st.cache_data(ttl=900, show_spinner=False)
 def load_pricing_dataset() -> pd.DataFrame:
@@ -194,3 +205,19 @@ def load_review_events_dataset() -> pd.DataFrame:
     dataset["review_date"] = pd.to_datetime(dataset["review_date"], errors="coerce")
     dataset["has_comment"] = dataset["has_comment"].fillna(False).astype(bool)
     return dataset
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_model3_dropdown_options() -> dict[str, list[str]]:
+    """Load raw listing options for Model 3 controls from the Silver layer."""
+    connection = connect_motherduck(read_only=True)
+    try:
+        dataset = query_dataframe(connection, MODEL3_DROPDOWN_OPTIONS_SQL)
+    finally:
+        close_connection(connection)
+
+    return {
+        "neighbourhoods": sorted(dataset["neighbourhood"].dropna().astype(str).unique().tolist()),
+        "room_types": sorted(dataset["room_type"].dropna().astype(str).unique().tolist()),
+        "property_types": sorted(dataset["property_type"].dropna().astype(str).unique().tolist()),
+    }
