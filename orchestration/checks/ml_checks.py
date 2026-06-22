@@ -32,13 +32,13 @@ def segmentation_training_check(segmentation_training_result: SegmentationTraini
 @asset_check(asset="price_batch_predictions")
 def price_prediction_check(price_batch_predictions: pd.DataFrame) -> AssetCheckResult:
     """Check inference output is one finite, non-negative prediction per listing."""
-    passed = not price_batch_predictions.empty and price_batch_predictions["listing_id"].is_unique and price_batch_predictions["model_version"].nunique() == 1 and np.isfinite(price_batch_predictions[["predicted_log_price", "predicted_price"]].to_numpy()).all() and not (price_batch_predictions["predicted_price"] < 0).any()
+    passed = price_batch_predictions.empty or (price_batch_predictions["listing_id"].is_unique and price_batch_predictions["model_version"].nunique() == 1 and price_batch_predictions["feature_hash"].notna().all() and np.isfinite(price_batch_predictions[["predicted_log_price", "predicted_price"]].to_numpy()).all() and not (price_batch_predictions["predicted_price"] < 0).any())
     return AssetCheckResult(passed=passed, metadata={"rows": len(price_batch_predictions)})
 
 
 @asset_check(asset="segmentation_assignments")
 def segmentation_assignment_check(segmentation_assignments: pd.DataFrame) -> AssetCheckResult:
     """Check inference output has one valid named cluster per listing."""
-    valid_ids = segmentation_assignments["cluster_id"].between(0, N_CLUSTERS - 1).all()
-    passed = not segmentation_assignments.empty and segmentation_assignments["listing_id"].is_unique and segmentation_assignments["model_version"].nunique() == 1 and segmentation_assignments["cluster_name"].notna().all() and valid_ids
+    valid_ids = segmentation_assignments["cluster_id"].between(0, N_CLUSTERS - 1).all() if not segmentation_assignments.empty else True
+    passed = segmentation_assignments.empty or (segmentation_assignments["listing_id"].is_unique and segmentation_assignments["model_version"].nunique() == 1 and segmentation_assignments["feature_hash"].notna().all() and segmentation_assignments["cluster_name"].notna().all() and valid_ids)
     return AssetCheckResult(passed=passed, metadata={"rows": len(segmentation_assignments)})

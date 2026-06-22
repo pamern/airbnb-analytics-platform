@@ -297,6 +297,10 @@ models:
     tests:
       - not_empty
     columns:
+      - name: feature_hash
+        description: Stable MD5 of the raw KMeans input features, used for incremental scoring.
+        tests:
+          - not_null
       - name: listing_id
         description: Unique Airbnb listing identifier. Used as an identifier only, not as a KMeans feature.
         tests:
@@ -367,6 +371,10 @@ models:
   - name: gold_price_model_features
     description: Listing-level feature mart and log-transformed price target for price-model training and evaluation.
     columns:
+      - name: feature_hash
+        description: Stable MD5 of the raw price-model input features, used for incremental scoring.
+        tests:
+          - not_null
       - name: listing_id
         description: Natural listing identifier and unique row key for the price-model feature set.
         tests:

@@ -27,6 +27,9 @@ class PriceModelingTests(unittest.TestCase):
             self.assertEqual(list(result.metric_records.columns), ["model_version", "dataset_type", "metric_name", "metric_value", "metric_std", "evaluated_at"])
             self.assertAlmostEqual(float(expected.iloc[0]["predicted_price"]), float(actual.iloc[0]["predicted_price"]))
             self.assertTrue(Path(result.artifact_paths["model"]).is_file())
+            self.assertTrue(Path(result.artifact_paths["shap_sample_values"]).is_file())
+            self.assertEqual(set(result.shap_importance["feature_level"]), {"TRANSFORMED", "ORIGINAL"})
+            self.assertTrue((result.shap_importance["importance_value"] >= 0).all())
 
 
 if __name__ == "__main__":

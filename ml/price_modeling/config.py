@@ -46,5 +46,7 @@ class PriceModelConfig:
     output_root: str = str(PRICE_OUTPUTS_DIR)
     run_error_analysis: bool = True
     run_explainability: bool = True
+    shap_sample_size: int = 1000
+    shap_random_state: int = 42
     xgb_n_estimators: int = 1007
     n_jobs: int = -1

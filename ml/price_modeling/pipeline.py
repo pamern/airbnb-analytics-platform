@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -14,12 +15,13 @@ import numpy as np
 import pandas as pd
 
 from ml.common.artifact_manager import create_versioned_artifact_dir, save_model_artifact, write_json
+from ml.common.paths import REPO_ROOT
 from ml.common.run_metadata import build_model_metric_records, build_model_registry_record, build_training_run_record
 from ml.price_modeling.config import PriceModelConfig, TrainingMode
 from ml.price_modeling.data import load_local_price_data, validate_input_schema
 from ml.price_modeling.error_analysis import build_prediction_error_frame
 from ml.price_modeling.evaluation import build_metrics_long_format, evaluate_regression_model
-from ml.price_modeling.explainability import calculate_native_importance
+from ml.price_modeling.explainability import ShapResult, calculate_shap_results
 from ml.price_modeling.prediction import predict_price
 from ml.price_modeling.preprocessing import build_preprocessor, prepare_modeling_frame, split_train_test
 from ml.price_modeling.training import build_price_pipeline, train_price_model
@@ -38,6 +40,7 @@ class TrainingResult:
     artifact_paths: dict[str, Path]
     predictions: pd.DataFrame
     metric_records: pd.DataFrame
+    shap_importance: pd.DataFrame
     run: dict[str, object]
     registry: dict[str, object]
 
@@ -46,16 +49,32 @@ def _new_version() -> str:
     return "price_v" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
 
 
-def _write_analysis_outputs(config: PriceModelConfig, version: str, predictions: pd.DataFrame, importance: pd.DataFrame | None) -> None:
+def _write_analysis_outputs(config: PriceModelConfig, version: str, predictions: pd.DataFrame) -> None:
     """Write new analysis outputs without changing historical files."""
     root = Path(config.output_root)
     error_path = root / "error_analysis" / f"{version}_prediction_errors.csv"
     error_path.parent.mkdir(parents=True, exist_ok=True)
     predictions.to_csv(error_path, index=False)
-    if importance is not None:
-        importance_path = root / "explainability" / f"{version}_native_importance.csv"
-        importance_path.parent.mkdir(parents=True, exist_ok=True)
-        importance.to_csv(importance_path, index=False)
+
+
+def _write_shap_artifacts(artifact_dir: Path, result: ShapResult) -> dict[str, Path]:
+    """Persist SHAP outputs beside the versioned model artifact for dashboard use."""
+    transformed = artifact_dir / "shap_transformed_importance.csv"
+    original = artifact_dir / "shap_original_importance.csv"
+    detail = artifact_dir / "shap_sample_values.parquet"
+    summary = artifact_dir / "shap_sample_summary.json"
+    names = artifact_dir / "feature_names.json"
+    result.transformed_importance.to_csv(transformed, index=False)
+    result.original_importance.to_csv(original, index=False)
+    result.sample_values.to_parquet(detail, index=False)
+    try:
+        detail_reference = detail.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        # Local smoke tests may intentionally use a temporary artifact root.
+        detail_reference = detail.name
+    write_json(summary, {**result.summary, "detail_artifact": detail_reference})
+    write_json(names, {"features": result.transformed_importance["feature_name"].tolist()})
+    return {"shap_transformed_importance": transformed, "shap_original_importance": original, "shap_sample_values": detail, "shap_sample_summary": summary, "feature_names": names}
 
 
 def run_price_training_pipeline(data: pd.DataFrame, config: PriceModelConfig | None = None, training_mode: TrainingMode | None = None) -> TrainingResult:
@@ -78,24 +97,30 @@ def run_price_training_pipeline(data: pd.DataFrame, config: PriceModelConfig | N
     preprocessor = build_preprocessor(effective_config.selected_features)
     model = train_price_model(build_price_pipeline(preprocessor, effective_config), X_train, y_train)
     metrics, predicted_log = evaluate_regression_model(model, X_test, y_test)
-    version = _new_version(); artifact_dir = create_versioned_artifact_dir(Path(effective_config.artifact_root), version)
-    model_path = save_model_artifact(model, artifact_dir)
-    feature_schema_path = write_json(artifact_dir / "feature_schema.json", {"features": list(effective_config.selected_features), "target_column": effective_config.target_column, "feature_set_version": effective_config.feature_set_version})
-    config_path = write_json(artifact_dir / "training_config.json", asdict(effective_config))
-    metrics_path = write_json(artifact_dir / "metrics.json", metrics)
+    version = _new_version()
+    run_id = version.removeprefix("price_v")
+    shap_result = calculate_shap_results(model, X_test, meta_test, run_id=run_id, model_name="price_model", model_version=version, sample_size=effective_config.shap_sample_size, random_state=effective_config.shap_random_state)
+    artifact_dir = create_versioned_artifact_dir(Path(effective_config.artifact_root), version)
+    try:
+        model_path = save_model_artifact(model, artifact_dir)
+        feature_schema_path = write_json(artifact_dir / "feature_schema.json", {"features": list(effective_config.selected_features), "target_column": effective_config.target_column, "feature_set_version": effective_config.feature_set_version})
+        config_path = write_json(artifact_dir / "training_config.json", asdict(effective_config))
+        metrics_path = write_json(artifact_dir / "metrics.json", metrics)
+        shap_paths = _write_shap_artifacts(artifact_dir, shap_result)
+    except Exception:
+        shutil.rmtree(artifact_dir, ignore_errors=True)
+        raise
     prediction_inputs = X_test.reset_index(drop=True).join(meta_test.reset_index(drop=True), rsuffix="_metadata")
     errors = build_prediction_error_frame(prediction_inputs, y_test.reset_index(drop=True), predicted_log)
-    importance = calculate_native_importance(model) if effective_config.run_explainability else None
-    if effective_config.run_error_analysis or effective_config.run_explainability:
-        _write_analysis_outputs(effective_config, version, errors, importance)
+    if effective_config.run_error_analysis:
+        _write_analysis_outputs(effective_config, version, errors)
     if tuning_trials is not None:
         trials_path = Path(effective_config.output_root) / "csv" / f"{version}_xgb_optuna_trials.csv"; trials_path.parent.mkdir(parents=True, exist_ok=True); tuning_trials.to_csv(trials_path, index=False)
     metric_records = build_metrics_long_format(metrics, model_version=version, dataset_type="test")
-    run_id = version.removeprefix("price_v")
     run = build_training_run_record(run_id=run_id, model_version=version, training_mode=mode, model_name=effective_config.champion_algorithm, status="success")
     registry = build_model_registry_record(model_version=version, model_name=effective_config.champion_algorithm, artifact_path=str(model_path))
     LOGGER.info("Price training succeeded run=%s version=%s rows=%d features=%d rmse=%.6f artifact=%s", run_id, version, len(frame), len(effective_config.selected_features), metrics["rmse"], model_path)
-    return TrainingResult(model=model, model_version=version, metrics=metrics, artifact_paths={"model": model_path, "feature_schema": feature_schema_path, "training_config": config_path, "metrics": metrics_path}, predictions=errors, metric_records=metric_records, run=run, registry=registry)
+    return TrainingResult(model=model, model_version=version, metrics=metrics, artifact_paths={"model": model_path, "feature_schema": feature_schema_path, "training_config": config_path, "metrics": metrics_path, **shap_paths}, predictions=errors, metric_records=metric_records, shap_importance=pd.concat([shap_result.transformed_importance, shap_result.original_importance], ignore_index=True), run=run, registry=registry)
 
 
 def run_price_evaluation_pipeline(model: object, data: pd.DataFrame, config: PriceModelConfig | None = None) -> tuple[dict[str, float], pd.DataFrame]:
@@ -115,7 +140,7 @@ def run_price_prediction_pipeline(model: object, data: dict[str, object] | pd.Da
 def _synthetic_data(rows: int = 80) -> pd.DataFrame:
     """Create a schema-compatible frame for the isolated CLI smoke test."""
     rng = np.random.default_rng(42)
-    return pd.DataFrame({"price": rng.uniform(500, 3000, rows), "neighbourhood": rng.choice(["Sukhumvit", "Silom", "Sathon"], rows), "property_type": "Apartment", "room_type": rng.choice(["Entire home/apt", "Private room"], rows), "host_response_time": "within an hour", "bedrooms": rng.integers(1, 4, rows), "bathrooms": rng.uniform(1, 3, rows), "accommodates": rng.integers(1, 7, rows), "review_scores_location": rng.uniform(3, 5, rows), "host_response_rate": rng.uniform(50, 100, rows), "host_listings_count": rng.integers(1, 10, rows), "calculated_host_listings_count": rng.integers(1, 10, rows), "host_total_listings_count": rng.integers(1, 10, rows), "host_acceptance_rate": rng.uniform(50, 100, rows), "number_of_reviews_ltm": rng.integers(0, 30, rows), "minimum_nights": rng.integers(1, 10, rows)})
+    return pd.DataFrame({"listing_id": np.arange(1, rows + 1), "price": rng.uniform(500, 3000, rows), "neighbourhood": rng.choice(["Sukhumvit", "Silom", "Sathon"], rows), "property_type": "Apartment", "room_type": rng.choice(["Entire home/apt", "Private room"], rows), "host_response_time": "within an hour", "bedrooms": rng.integers(1, 4, rows), "bathrooms": rng.uniform(1, 3, rows), "accommodates": rng.integers(1, 7, rows), "review_scores_location": rng.uniform(3, 5, rows), "host_response_rate": rng.uniform(50, 100, rows), "host_listings_count": rng.integers(1, 10, rows), "calculated_host_listings_count": rng.integers(1, 10, rows), "host_total_listings_count": rng.integers(1, 10, rows), "host_acceptance_rate": rng.uniform(50, 100, rows), "number_of_reviews_ltm": rng.integers(0, 30, rows), "minimum_nights": rng.integers(1, 10, rows)})
 
 
 def main() -> None:

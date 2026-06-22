@@ -20,7 +20,7 @@ class TrainingRun:
 
 
 def build_training_run_record(**kwargs: Any) -> dict[str, Any]:
-    """Build a future ``gold_ml_training_runs``-compatible record."""
+    """Build a local record consumed by the orchestration ``mlops.model_runs`` writer."""
     return asdict(TrainingRun(started_at=datetime.now(timezone.utc).isoformat(), **kwargs))
 
 

@@ -151,7 +151,17 @@ select
     beds,
     amenities_count,
     minimum_nights,
-    minimum_nights_log
+    minimum_nights_log,
+    md5(concat_ws('|',
+        coalesce(cast(room_type as varchar), '__NULL__'),
+        coalesce(cast(property_base_group as varchar), '__NULL__'),
+        coalesce(cast(accommodates as varchar), '__NULL__'),
+        coalesce(cast(bedrooms as varchar), '__NULL__'),
+        coalesce(cast(bathrooms as varchar), '__NULL__'),
+        coalesce(cast(beds as varchar), '__NULL__'),
+        coalesce(cast(amenities_count as varchar), '__NULL__'),
+        coalesce(cast(minimum_nights_log as varchar), '__NULL__')
+    )) as feature_hash
 from imputed
 where listing_id is not null
   and price is not null
