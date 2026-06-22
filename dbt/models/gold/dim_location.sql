@@ -1,10 +1,9 @@
 {% set city_name = env_var('AIRBNB_CITY', 'Bangkok') %}
 
 with known_locations as (
-    select distinct
+    select
         neighbourhood
-    from {{ ref('silver_listings') }}
-    where neighbourhood is not null
+    from {{ ref('silver_neighbourhoods') }}
 ),
 
 all_locations as (

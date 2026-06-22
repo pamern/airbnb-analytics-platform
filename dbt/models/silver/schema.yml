@@ -107,7 +107,7 @@ models:
           - unique
 
   - name: silver_calendar
-    description: Cleaned daily listing availability table at one row per listing_id and calendar_date, with calendar price fields retained when available.
+    description: Cleaned daily listing availability table at one row per listing_id and calendar_date.
     tests:
       - unique_combination_of_columns:
           arguments:
@@ -127,10 +127,6 @@ models:
         description: Calendar date.
         tests:
           - not_null
-      - name: price
-        description: Daily price converted from currency text to numeric value.
-        tests:
-          - positive_or_null
       - name: adjusted_price
         description: Adjusted daily price converted from currency text to numeric value.
         tests:

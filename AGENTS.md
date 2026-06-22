@@ -11,7 +11,6 @@ Mục tiêu của project là xây dựng một pipeline phân tích dữ liệu
 - Huấn luyện mô hình Machine Learning từ dữ liệu Gold layer.
 - Sử dụng LLM để diễn giải insight và kết quả dự đoán.
 - Xây dựng dashboard bằng Streamlit.
-- Điều phối pipeline bằng Airflow.
 - Quản lý môi trường Python bằng uv.
 - Chạy local bằng Docker Compose.
 
@@ -26,7 +25,6 @@ Project sử dụng các công nghệ chính:
 - Docker / Docker Compose
 - DuckDB / MotherDuck
 - dbt
-- Airflow
 - Streamlit
 - Machine Learning
 - LLM API
@@ -51,7 +49,6 @@ airbnb-analytics-platform/
 ├── ml/
 ├── llm/
 ├── app/
-├── airflow/
 ├── configs/
 ├── utils/
 ├── notebooks/
@@ -136,22 +133,6 @@ Vai trò:
 
 Không nên viết transform phức tạp trong Streamlit. Dashboard nên đọc dữ liệu từ Gold layer, ML outputs hoặc LLM outputs.
 
-### `airflow/`
-
-Chứa DAG điều phối pipeline.
-
-Airflow là công cụ orchestration chính. DAG nên gọi các script hoặc command độc lập thay vì chứa toàn bộ business logic.
-
-Pipeline tổng quát:
-
-load_to_motherduck
-    ↓
-dbt build
-    ↓
-train / predict ML
-    ↓
-generate LLM insights
-
 ### `configs/`
 
 Chứa cấu hình dùng chung.
@@ -196,7 +177,7 @@ Ví dụ:
 - Chạy LLM.
 - Chạy Streamlit app.
 
-Không cần `run_all_pipeline.sh` vì Airflow đảm nhiệm orchestration chính.
+Các script nên chạy được độc lập để dễ debug và demo từng phần của pipeline.
 
 ### `reports/`
 
@@ -231,8 +212,6 @@ dbt Silver
 dbt Gold
     ↓
 ML / LLM / Streamlit
-
-Airflow điều phối các bước chính của pipeline.
 
 Streamlit dashboard là nơi hiển thị kết quả cuối và có thể deploy lên cloud.
 
@@ -275,27 +254,12 @@ Docker Compose dùng để chạy stack local.
 
 Các service có thể gồm:
 
-- Airflow
 - Streamlit app
 - Các service hỗ trợ khác nếu cần
 
 `Dockerfile` dùng để đóng gói app hoặc runtime cần thiết cho project.
 
 Không nên đưa secret trực tiếp vào Dockerfile hoặc docker-compose. Secret nên lấy từ `.env` hoặc environment variables.
-
----
-
-## Quy ước Airflow
-
-Airflow dùng để điều phối pipeline, không dùng để chứa business logic lớn.
-
-DAG nên:
-
-- Gọi script hoặc command độc lập.
-- Có thứ tự task rõ ràng.
-- Có retry cơ bản nếu cần.
-- Không chứa logic transform phức tạp.
-- Không chứa credential hard-code.
 
 ---
 
@@ -361,12 +325,11 @@ Khi chỉnh sửa project này, hãy tuân thủ:
 4. Không đưa secret vào code.
 5. Không trộn lẫn vai trò giữa `configs/` và `utils/`.
 6. Không viết transform phức tạp trong Streamlit app.
-7. Không viết business logic lớn trực tiếp trong Airflow DAG.
-8. Không trộn ML, LLM và app vào cùng một module.
-9. Nếu thêm dependency, cập nhật `pyproject.toml`.
-10. Nếu thêm model dbt quan trọng, bổ sung test hoặc tài liệu liên quan khi phù hợp.
-11. Nếu chưa chắc hướng xử lý, chọn phương án đơn giản, dễ demo trước.
-12. Nếu cần thay đổi cấu trúc để project chạy đúng hơn, có thể đề xuất thay đổi nhưng phải giải thích lý do.
+7. Không trộn ML, LLM và app vào cùng một module.
+8. Nếu thêm dependency, cập nhật `pyproject.toml`.
+9. Nếu thêm model dbt quan trọng, bổ sung test hoặc tài liệu liên quan khi phù hợp.
+10. Nếu chưa chắc hướng xử lý, chọn phương án đơn giản, dễ demo trước.
+11. Nếu cần thay đổi cấu trúc để project chạy đúng hơn, có thể đề xuất thay đổi nhưng phải giải thích lý do.
 
 ---
 

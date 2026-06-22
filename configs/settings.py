@@ -56,15 +56,7 @@ class StreamlitSettings:
     server_port: int
 
 
-@dataclass(frozen=True)
-class AirflowSettings:
-    """Cấu hình Airflow local."""
-
-    uid: int
-    project_dir: str
-
-
-ServiceName = Literal["motherduck", "llm", "streamlit", "airflow"]
+ServiceName = Literal["motherduck", "llm", "streamlit"]
 
 
 APP = AppSettings(
@@ -87,12 +79,6 @@ STREAMLIT = StreamlitSettings(
     server_port=_get_int("STREAMLIT_SERVER_PORT", 8501),
 )
 
-AIRFLOW = AirflowSettings(
-    uid=_get_int("AIRFLOW_UID", 50000),
-    project_dir=getenv("AIRFLOW_PROJ_DIR", "./airflow"),
-)
-
-
 def validate_required_settings(service: ServiceName | None = None) -> list[str]:
     """Kiểm tra các biến bắt buộc trước khi kết nối service thật.
 
@@ -111,10 +97,6 @@ def validate_required_settings(service: ServiceName | None = None) -> list[str]:
         },
         "streamlit": {
             "STREAMLIT_SERVER_PORT": str(STREAMLIT.server_port),
-        },
-        "airflow": {
-            "AIRFLOW_UID": str(AIRFLOW.uid),
-            "AIRFLOW_PROJ_DIR": AIRFLOW.project_dir,
         },
     }
 

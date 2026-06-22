@@ -12,6 +12,8 @@ wheels/
 
 # Local secrets
 .env
+.env.local
+.mcp.json
 
 # Raw datasets can be large; keep only samples/docs in Git
 data/raw/
@@ -19,6 +21,13 @@ data/raw/
 # Local service data
 minio_data/
 *.log
+logs/
+
+# Generated ML artifacts and analysis outputs
+ml/artifacts/
+ml/outputs/
+*.joblib
+*.pkl
 
 # dbt artifacts and local DuckDB files
 dbt/target/
@@ -27,3 +36,10 @@ dbt/logs/
 dbt/.user.yml
 *.duckdb
 *.duckdb.wal
+
+# Local AI tooling and Dagster runtime state
+.agents/
+.codegraph/
+.gemini/
+.tmp_dagster_home_*/
+.dagster/

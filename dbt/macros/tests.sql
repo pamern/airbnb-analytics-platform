@@ -20,6 +20,29 @@ group by {{ combination_of_columns | join(', ') }}
 having count(*) > 1
 {% endtest %}
 
+{% test greater_than(model, column_name, value) %}
+select *
+from {{ model }}
+where {{ column_name }} is not null
+  and {{ column_name }} <= {{ value }}
+{% endtest %}
+
+{% test non_negative(model, column_name) %}
+select *
+from {{ model }}
+where {{ column_name }} is not null
+  and {{ column_name }} < 0
+{% endtest %}
+
+{% test not_empty(model) %}
+select *
+from (
+    select count(*) as row_count
+    from {{ model }}
+) as row_counts
+where row_count = 0
+{% endtest %}
+
 {% test less_than_or_equal_or_null(model, column_name, right_column_name) %}
 select *
 from {{ model }}

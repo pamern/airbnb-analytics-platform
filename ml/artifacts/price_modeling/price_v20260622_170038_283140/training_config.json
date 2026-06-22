@@ -1,0 +1,52 @@
+{
+  "model_task": "price_prediction",
+  "target_column": "log_price",
+  "price_column": "price",
+  "random_seed": 42,
+  "test_size": 0.2,
+  "n_splits": 5,
+  "primary_metric": "rmse",
+  "secondary_metrics": [
+    "mae",
+    "r2",
+    "adjusted_r2"
+  ],
+  "feature_set_version": "selected_v1",
+  "selected_features": [
+    "neighbourhood",
+    "bedrooms",
+    "room_type",
+    "property_base_group",
+    "host_response_time",
+    "bathrooms",
+    "accommodates",
+    "review_scores_location",
+    "host_response_rate",
+    "host_listings_count",
+    "calculated_host_listings_count",
+    "host_total_listings_count",
+    "host_acceptance_rate",
+    "number_of_reviews_ltm",
+    "minimum_nights"
+  ],
+  "champion_algorithm": "XGBRegressor",
+  "best_parameters": {
+    "learning_rate": 0.034246398779081366,
+    "max_depth": 8,
+    "min_child_weight": 4,
+    "subsample": 0.7650915513722765,
+    "colsample_bytree": 0.8207240159340592,
+    "gamma": 0.03262752834716495,
+    "reg_alpha": 0.001997728480368332,
+    "reg_lambda": 0.01363366782252473
+  },
+  "training_mode": "retrain",
+  "artifact_root": "D:\\Projects\\Y2026_Sources\\airbnb-analytics-platform\\ml\\artifacts\\price_modeling",
+  "output_root": "D:\\Projects\\Y2026_Sources\\airbnb-analytics-platform\\ml\\outputs\\price_modeling",
+  "run_error_analysis": true,
+  "run_explainability": true,
+  "shap_sample_size": 1000,
+  "shap_random_state": 42,
+  "xgb_n_estimators": 1007,
+  "n_jobs": -1
+}
