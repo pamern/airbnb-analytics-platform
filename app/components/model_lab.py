@@ -508,7 +508,11 @@ def _segment_views(predicted_price: float, segment) -> None:
     reference = pd.to_numeric(distribution.get("actual_price", pd.Series(dtype=float)), errors="coerce").dropna()
     p25, p75 = reference.quantile([.25, .75]) if len(reference) >= MIN_SEGMENT_DISTRIBUTION_SIZE else (np.nan, np.nan)
     position = "Within segment range" if pd.notna(p25) and p25 <= predicted_price <= p75 else "Below segment range" if pd.notna(p25) and predicted_price < p25 else "Above segment range" if pd.notna(p75) else "Segment range unavailable"
-    cols = st.columns(4); cols[0].metric("Predicted Segment", segment.cluster_name); cols[1].metric("Segment Median", _number(median, 0)); cols[2].metric("Price Position", position); cols[3].metric("Difference vs Segment Median", "N/A" if pd.isna(median) or median == 0 else f"{(predicted_price - median) / median:+.1%}")
+    cols = st.columns(4)
+    _render_metric(cols[0], "Predicted Segment", segment.cluster_name)
+    _render_metric(cols[1], "Segment Median", _number(median, 0))
+    _render_metric(cols[2], "Price Position", position)
+    _render_metric(cols[3], "Difference vs Segment Median", "N/A" if pd.isna(median) or median == 0 else f"{(predicted_price - median) / median:+.1%}")
     if distribution_error or len(reference) < MIN_SEGMENT_DISTRIBUTION_SIZE:
         st.info("Not enough listings are available to estimate the segment price distribution.")
     else:
