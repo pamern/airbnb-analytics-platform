@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from app.data_access import load_host_quality_dataset, load_review_events_dataset
-from components.ui import render_metric_grid, two_column_layout
+from components.ui import DEFAULT_PLOTLY_CONFIG, render_metric_grid, two_column_layout
 
 
 def _format_pct(value: float | int | None) -> str:
@@ -34,7 +34,7 @@ def _assign_host_size_group(total_listings: float | int | None) -> str:
 
 
 def _render_filters(host_quality: pd.DataFrame) -> dict[str, object]:
-    with st.expander("Host & review filters", expanded=False):
+    with st.expander("Host & review filters", expanded=True):
         c1, c2, c3, c4 = st.columns(4)
 
         neighbourhood_options = sorted(host_quality["neighbourhood"].dropna().unique().tolist())
@@ -59,7 +59,7 @@ def _render_filters(host_quality: pd.DataFrame) -> dict[str, object]:
             selected_host_sizes = st.multiselect(
                 "Host size",
                 options=host_size_options,
-                default=["Solo", "Small", "Medium", "Large"],
+                default=[],
                 key="host_size_groups",
             )
         with c4:
@@ -619,7 +619,8 @@ def _build_review_watchlist_table(
     def build_watchlist_reason(row: pd.Series) -> str:
         reasons: list[str] = []
         reviews = row["number_of_reviews"] if pd.notna(row["number_of_reviews"]) else 0
-        is_verified = row.get("host_identity_verified", False) is True
+        verified_value = row.get("host_identity_verified", False)
+        is_verified = pd.notna(verified_value) and bool(verified_value)
         if (
             row["is_reliable_review"]
             and pd.notna(row["review_scores_rating"])
@@ -736,13 +737,13 @@ def render_host_review_quality() -> None:
     with row_1_left:
         fig = _build_superhost_comparison(host_view)
         if fig.data:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
         else:
             st.info("Not enough host-tier data to compare superhosts and non-superhosts.")
     with row_1_right:
         fig = _build_review_dimension_profile(host_view)
         if fig.data:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
         else:
             st.info("Review dimension scores are not available in the current filtered view.")
 
@@ -750,13 +751,13 @@ def render_host_review_quality() -> None:
     with row_2_left:
         fig = _build_host_size_operations(host_view)
         if fig.data:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
         else:
             st.info("Not enough host-size data to compare acceptance risk.")
     with row_2_right:
         fig = _build_reliable_review_coverage_by_host_size(host_view)
         if fig.data:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
         else:
             st.info("No reliable review coverage by host size is available under the current filters.")
 
@@ -767,13 +768,13 @@ def render_host_review_quality() -> None:
     with row_3_left:
         fig = _build_review_quality_distribution(host_view)
         if fig.data:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
         else:
             st.info("No listing review quality distribution is available under the current filters.")
     with row_3_right:
         fig = _build_review_score_vs_evidence(host_view)
         if fig.data:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
         else:
             st.info("No review score versus review evidence view is available under the current filters.")
 

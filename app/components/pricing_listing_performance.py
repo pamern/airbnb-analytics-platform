@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from app.data_access import load_pricing_dataset
-from components.ui import render_metric_grid, two_column_layout
+from components.ui import DEFAULT_PLOTLY_CONFIG, render_metric_grid, two_column_layout
 
 
 def _format_thb(value: float | int | None) -> str:
@@ -34,13 +34,78 @@ def _format_score(value: float | int | None) -> str:
     return f"{value:.1f}"
 
 
+def _format_days(value: float | int | None) -> str:
+    if value is None or pd.isna(value):
+        return "N/A"
+    return f"{value:,.0f} days"
+
+
+def _valid_occupancy_days_series(dataframe: pd.DataFrame) -> pd.Series:
+    return dataframe["estimated_occupancy_l365d"].where(
+        dataframe["estimated_occupancy_l365d"].between(0, 365, inclusive="both")
+    )
+
+
+def _valid_occupancy_rate_series(dataframe: pd.DataFrame) -> pd.Series:
+    valid_days = _valid_occupancy_days_series(dataframe)
+    return (valid_days / 365.0).where(valid_days.notna())
+
+
+def _valid_occupancy_listing_mask(dataframe: pd.DataFrame) -> pd.Series:
+    return _valid_occupancy_days_series(dataframe).notna()
+
+
+def _occupancy_coverage_stats(dataframe: pd.DataFrame) -> dict[str, float | int]:
+    total_listings = dataframe["listing_id"].nunique()
+    valid_occupancy_listings = dataframe.loc[
+        _valid_occupancy_listing_mask(dataframe),
+        "listing_id",
+    ].nunique()
+    occupancy_coverage = (
+        valid_occupancy_listings / total_listings if total_listings else np.nan
+    )
+    return {
+        "total_listings": total_listings,
+        "valid_occupancy_listings": valid_occupancy_listings,
+        "occupancy_coverage": occupancy_coverage,
+        "median_occupied_days": _valid_occupancy_days_series(dataframe).median(),
+    }
+
+
+def _price_coverage_stats(full_dataframe: pd.DataFrame, priced_dataframe: pd.DataFrame) -> dict[str, float | int]:
+    total_listings = full_dataframe["listing_id"].nunique()
+    priced_listings = priced_dataframe["listing_id"].nunique()
+    price_coverage = priced_listings / total_listings if total_listings else np.nan
+    return {
+        "total_listings": total_listings,
+        "priced_listings": priced_listings,
+        "price_coverage": price_coverage,
+    }
+
+
+def _price_slider_bounds(dataframe: pd.DataFrame) -> tuple[float, float, float]:
+    positive_prices = dataframe.loc[dataframe["price"] > 0, "price"].dropna()
+    if positive_prices.empty:
+        return (0.0, 1.0, 1.0)
+
+    min_price = float(positive_prices.min())
+    p99_price = float(positive_prices.quantile(0.99))
+    if p99_price < min_price:
+        p99_price = min_price
+    return (min_price, p99_price, p99_price)
+
+
+def _priced_view(dataframe: pd.DataFrame) -> pd.DataFrame:
+    return dataframe[dataframe["price"].notna() & dataframe["price"].gt(0)].copy()
+
+
 def _render_filters(dataframe: pd.DataFrame) -> dict[str, object]:
-    with st.expander("Pricing filters", expanded=False):
-        c1, c2, c3, c4, c5 = st.columns(5)
+    with st.expander("Pricing filters", expanded=True):
+        c1, c2, c3, c4 = st.columns(4)
 
         room_type_options = sorted(dataframe["room_type"].dropna().unique().tolist())
         neighbourhood_options = sorted(dataframe["neighbourhood"].dropna().unique().tolist())
-        property_type_options = sorted(dataframe["property_type"].dropna().unique().tolist())
+        min_price, slider_max_price, default_price_upper = _price_slider_bounds(dataframe)
 
         with c1:
             selected_room_types = st.multiselect(
@@ -57,116 +122,81 @@ def _render_filters(dataframe: pd.DataFrame) -> dict[str, object]:
                 key="pricing_neighbourhoods",
             )
         with c3:
-            min_price = float(dataframe["price"].min())
-            max_price = float(dataframe["price"].max())
             selected_price_range = st.slider(
-                "Listed Price Range (THB)",
+                "Listed price range (THB)",
                 min_value=float(min_price),
-                max_value=float(max_price),
-                value=(float(min_price), float(max_price)),
+                max_value=float(slider_max_price),
+                value=(float(min_price), float(default_price_upper)),
+                help=(
+                    "The slider maximum is set to the 99th percentile for usability. "
+                    "When left at the default maximum, listings priced above P99 remain included."
+                ),
                 key="pricing_price_range",
             )
         with c4:
-            occupancy_max = float(
-                dataframe["estimated_occupancy_rate_l365d"].fillna(0).max()
+            selected_occupancy_days_range = st.slider(
+                "Estimated occupied days L365D",
+                min_value=0,
+                max_value=365,
+                value=(0, 365),
+                step=1,
+                key="pricing_occupancy_days_range",
             )
-            selected_occupancy_range = st.slider(
-                "Estimated occupancy rate",
-                min_value=0.0,
-                max_value=max(1.0, occupancy_max),
-                value=(0.0, max(1.0, occupancy_max)),
-                step=0.05,
-                format="%.2f",
-                key="pricing_occupancy_range",
-            )
-        with c5:
-            reviewed_only = st.toggle(
-                "Review reliability",
-                value=False,
-                help="Only keep listings with at least 5 reviews.",
-                key="pricing_review_reliability",
-            )
-
-        with st.container():
-            a1, a2, a3 = st.columns(3)
-            with a1:
-                selected_property_types = st.multiselect(
-                    "Property type",
-                    options=property_type_options,
-                    default=[],
-                    key="pricing_property_types",
-                )
-            with a2:
-                search_text = st.text_input(
-                    "Listing / host search",
-                    value="",
-                    key="pricing_search_text",
-                )
-            with a3:
-                st.caption(
-                    "Estimated occupancy and revenue come from source-derived fields, not confirmed booking transactions."
-                )
 
     return {
         "selected_room_types": selected_room_types,
         "selected_neighbourhoods": selected_neighbourhoods,
         "selected_price_range": selected_price_range,
-        "selected_occupancy_range": selected_occupancy_range,
-        "reviewed_only": reviewed_only,
-        "selected_property_types": selected_property_types,
-        "search_text": search_text,
+        "price_slider_default_lower": min_price,
+        "price_slider_default_upper": default_price_upper,
+        "selected_occupancy_days_range": selected_occupancy_days_range,
     }
 
 
-def _apply_filters(
-    dataframe: pd.DataFrame,
-    filters: dict[str, object],
-    *,
-    apply_price_range: bool = True,
-    apply_review_reliability: bool = True,
-) -> pd.DataFrame:
+def _apply_main_filters(dataframe: pd.DataFrame, filters: dict[str, object]) -> pd.DataFrame:
     view = dataframe.copy()
     selected_room_types = filters["selected_room_types"]
     selected_neighbourhoods = filters["selected_neighbourhoods"]
     selected_price_range = filters["selected_price_range"]
-    selected_occupancy_range = filters["selected_occupancy_range"]
-    reviewed_only = filters["reviewed_only"]
-    selected_property_types = filters["selected_property_types"]
-    search_text = str(filters["search_text"])
+    selected_occupancy_days_range = filters["selected_occupancy_days_range"]
+    price_slider_default_lower = float(filters["price_slider_default_lower"])
+    price_slider_default_upper = float(filters["price_slider_default_upper"])
 
     if selected_room_types:
         view = view[view["room_type"].isin(selected_room_types)]
     if selected_neighbourhoods:
         view = view[view["neighbourhood"].isin(selected_neighbourhoods)]
-    if selected_property_types:
-        view = view[view["property_type"].isin(selected_property_types)]
-    if apply_price_range:
+
+    lower_price, upper_price = selected_price_range
+    price_filter_changed = (
+        not np.isclose(lower_price, price_slider_default_lower)
+        or not np.isclose(upper_price, price_slider_default_upper)
+    )
+    if price_filter_changed:
+        price_mask = view["price"].between(lower_price, upper_price, inclusive="both")
+        if np.isclose(upper_price, price_slider_default_upper):
+            price_mask = price_mask | view["price"].gt(price_slider_default_upper)
+        view = view[price_mask]
+
+    occupancy_lower, occupancy_upper = selected_occupancy_days_range
+    if (occupancy_lower, occupancy_upper) != (0, 365):
+        occupancy_days = _valid_occupancy_days_series(view)
         view = view[
-            view["price"].between(selected_price_range[0], selected_price_range[1], inclusive="both")
+            occupancy_days.notna()
+            & occupancy_days.between(occupancy_lower, occupancy_upper, inclusive="both")
         ]
-    view = view[
-        view["estimated_occupancy_rate_l365d"].fillna(0).between(
-            selected_occupancy_range[0],
-            selected_occupancy_range[1],
-            inclusive="both",
-        )
-    ]
-    if reviewed_only and apply_review_reliability:
-        view = view[view["number_of_reviews"] >= 5]
-    if search_text.strip():
-        pattern = search_text.strip().lower()
-        view = view[
-            view["listing_name"].str.lower().str.contains(pattern, na=False)
-            | view["host_name"].str.lower().str.contains(pattern, na=False)
-            | view["listing_id"].astype(str).str.contains(pattern, na=False)
-        ]
+
     return view
 
 
-def _render_kpis(dataframe: pd.DataFrame) -> None:
+def _render_kpis(
+    dataframe: pd.DataFrame,
+    price_coverage_stats: dict[str, float | int],
+) -> None:
     review_view = dataframe[
         dataframe["review_scores_rating"].notna() & (dataframe["number_of_reviews"] >= 5)
     ].copy()
+    occupancy_stats = _occupancy_coverage_stats(dataframe)
     revenue_eligible = dataframe[dataframe["estimated_revenue_l365d"].notna()].copy()
     revenue_per_listing = (
         revenue_eligible["estimated_revenue_l365d"].sum() / len(revenue_eligible)
@@ -178,8 +208,8 @@ def _render_kpis(dataframe: pd.DataFrame) -> None:
         [
             {
                 "label": "Valid Listings",
-                "value": f"{len(dataframe[dataframe['price'] > 0]):,}",
-                "help": "Number of listings remaining after filters with positive listed price.",
+                "value": f"{dataframe['listing_id'].nunique():,}",
+                "help": "Distinct listings with a valid listed price remaining after global filters.",
             },
             {
                 "label": "Median Listed Price",
@@ -189,15 +219,15 @@ def _render_kpis(dataframe: pd.DataFrame) -> None:
             {
                 "label": "Typical Price Range",
                 "value": (
-                    f"{_format_thb_number(dataframe['price'].quantile(0.25))} - "
-                    f"{_format_thb_number(dataframe['price'].quantile(0.75))} THB"
+                    f"{_format_thb_number(dataframe['price'].quantile(0.25))}"
+                    f"-{_format_thb_number(dataframe['price'].quantile(0.75))} THB"
                 ),
-                "help": "Typical listed price band for the bulk of listings after filters.",
+                "help": "Typical listed price band for the bulk of listings after global filters.",
             },
             {
-                "label": "Median Est. Occupancy Rate L365D",
-                "value": _format_pct(dataframe["estimated_occupancy_rate_l365d"].median()),
-                "help": "Median source-derived estimated occupancy rate, calculated from estimated occupied days over the trailing 365-day window.",
+                "label": "Median Est. Occupied Days L365D",
+                "value": _format_days(occupancy_stats["median_occupied_days"]),
+                "help": "Median source-derived occupied-day estimate across distinct listings with valid estimates only.",
             },
             {
                 "label": "Avg Est. Revenue / Listing L365D",
@@ -207,21 +237,31 @@ def _render_kpis(dataframe: pd.DataFrame) -> None:
             {
                 "label": "Median Review Score",
                 "value": _format_score(review_view["review_scores_rating"].median()),
-                "help": "Only uses listings with at least 5 reviews.",
+                "help": "Only uses listings with a non-null review score and at least 5 reviews.",
             },
         ],
         cards_per_row=3,
     )
     st.caption(
-        "Estimated Revenue and Estimated Occupancy are source-derived estimated indicators for relative comparison, not confirmed transaction-based booking results."
+        "Source-derived estimates only · "
+        f"Overall price coverage: {price_coverage_stats['priced_listings']:,}/"
+        f"{price_coverage_stats['total_listings']:,} "
+        f"({_format_pct(price_coverage_stats['price_coverage'])}) · "
+        f"Occupancy estimate coverage: "
+        f"{occupancy_stats['valid_occupancy_listings']:,}/"
+        f"{occupancy_stats['total_listings']:,} "
+        f"({_format_pct(occupancy_stats['occupancy_coverage'])})."
     )
 
 
 def _build_price_distribution(dataframe: pd.DataFrame) -> go.Figure:
-    p99 = dataframe["price"].quantile(0.99)
-    view = dataframe[dataframe["price"] <= p99].copy()
-    median_price = dataframe["price"].median()
-    p75_price = dataframe["price"].quantile(0.75)
+    priced = _priced_view(dataframe)
+    if priced.empty:
+        return go.Figure()
+    p99 = priced["price"].quantile(0.99)
+    view = priced[priced["price"] <= p99].copy()
+    median_price = priced["price"].median()
+    p75_price = priced["price"].quantile(0.75)
 
     fig = go.Figure()
     fig.add_trace(
@@ -262,13 +302,20 @@ def _build_price_distribution(dataframe: pd.DataFrame) -> go.Figure:
 
 
 def _build_price_by_segment(dataframe: pd.DataFrame) -> go.Figure:
+    view = _priced_view(dataframe)
+    if view.empty:
+        return go.Figure()
     summary = (
-        dataframe.groupby("room_type", dropna=False)
-        .agg(
-            median_price=("price", "median"),
-            p25_price=("price", lambda values: values.quantile(0.25)),
-            p75_price=("price", lambda values: values.quantile(0.75)),
-            listing_count=("listing_id", "count"),
+        view.groupby("room_type", dropna=False)
+        .apply(
+            lambda frame: pd.Series(
+                {
+                    "median_price": frame["price"].median(),
+                    "p25_price": frame["price"].quantile(0.25),
+                    "p75_price": frame["price"].quantile(0.75),
+                    "listing_count": frame["listing_id"].nunique(),
+                }
+            )
         )
         .reset_index()
         .sort_values("median_price", ascending=False)
@@ -296,7 +343,7 @@ def _build_price_by_segment(dataframe: pd.DataFrame) -> go.Figure:
                 "Median listed price: %{y:,.0f} THB<br>"
                 "P25: %{customdata[0]:,.0f} THB<br>"
                 "P75: %{customdata[1]:,.0f} THB<br>"
-                "Listings: %{customdata[2]:,.0f}<extra></extra>"
+                "Listing count: %{customdata[2]:,.0f}<extra></extra>"
             ),
             name="Median price",
         )
@@ -306,10 +353,7 @@ def _build_price_by_segment(dataframe: pd.DataFrame) -> go.Figure:
             x=summary["room_type"],
             y=summary["median_price"],
             mode="markers",
-            marker=dict(
-                color="#1F7A8C",
-                size=1,
-            ),
+            marker=dict(color="#1F7A8C", size=1),
             error_y=dict(
                 type="data",
                 symmetric=False,
@@ -350,10 +394,13 @@ def _build_price_by_segment(dataframe: pd.DataFrame) -> go.Figure:
 
 
 def _build_pricing_strategy_matrix(dataframe: pd.DataFrame) -> go.Figure:
+    view = _priced_view(dataframe)
+    if view.empty:
+        return go.Figure()
     neighbourhood_summary = (
-        dataframe.groupby("neighbourhood", dropna=False)
+        view.groupby("neighbourhood", dropna=False)
         .agg(
-            total_listing_count=("listing_id", "count"),
+            total_listing_count=("listing_id", "nunique"),
             overall_median_price=("price", "median"),
         )
         .reset_index()
@@ -367,16 +414,14 @@ def _build_pricing_strategy_matrix(dataframe: pd.DataFrame) -> go.Figure:
         .copy()
     )
     ordered_neighbourhoods = (
-        top_neighbourhoods.sort_values("overall_median_price", ascending=False)[
-            "neighbourhood"
-        ].tolist()
+        top_neighbourhoods.sort_values("overall_median_price", ascending=False)["neighbourhood"].tolist()
     )
 
     summary = (
-        dataframe.groupby(["neighbourhood", "room_type"], dropna=False)
+        view.groupby(["neighbourhood", "room_type"], dropna=False)
         .agg(
             median_price=("price", "median"),
-            listing_count=("listing_id", "count"),
+            listing_count=("listing_id", "nunique"),
         )
         .reset_index()
     )
@@ -386,24 +431,17 @@ def _build_pricing_strategy_matrix(dataframe: pd.DataFrame) -> go.Figure:
         return go.Figure()
 
     room_type_order = (
-        dataframe.groupby("room_type", dropna=False)["price"]
+        view.groupby("room_type", dropna=False)["price"]
         .median()
         .sort_values(ascending=False)
         .index
         .tolist()
     )
 
-    pivot = summary.pivot(
-        index="neighbourhood",
-        columns="room_type",
-        values="median_price",
-    )
+    pivot = summary.pivot(index="neighbourhood", columns="room_type", values="median_price")
     pivot = pivot.reindex(index=ordered_neighbourhoods, columns=room_type_order)
-    counts = summary.pivot(
-        index="neighbourhood",
-        columns="room_type",
-        values="listing_count",
-    ).reindex(index=ordered_neighbourhoods, columns=room_type_order)
+    counts = summary.pivot(index="neighbourhood", columns="room_type", values="listing_count")
+    counts = counts.reindex(index=ordered_neighbourhoods, columns=room_type_order)
 
     fig = go.Figure(
         data=go.Heatmap(
@@ -417,12 +455,12 @@ def _build_pricing_strategy_matrix(dataframe: pd.DataFrame) -> go.Figure:
                 [0.75, "#BF6C32"],
                 [1.0, "#7A3B12"],
             ],
-            customdata=counts.values,
+            customdata=np.dstack([counts.values]),
             hovertemplate=(
                 "Neighbourhood: %{y}<br>"
                 "Room type: %{x}<br>"
                 "Median listed price: %{z:,.0f} THB<br>"
-                "Listings: %{customdata:,.0f}<extra></extra>"
+                "Valid listings: %{customdata[0]:,.0f}<extra></extra>"
             ),
             colorbar=dict(title="Median Listed Price (THB)"),
         )
@@ -433,7 +471,7 @@ def _build_pricing_strategy_matrix(dataframe: pd.DataFrame) -> go.Figure:
         xaxis_title="Room type",
         yaxis_title="Neighbourhood",
         height=420,
-        margin=dict(l=0, r=0, t=40, b=0),
+        margin=dict(l=0, r=16, t=52, b=0),
         plot_bgcolor="white",
         paper_bgcolor="white",
     )
@@ -441,9 +479,11 @@ def _build_pricing_strategy_matrix(dataframe: pd.DataFrame) -> go.Figure:
 
 
 def _build_price_vs_performance(dataframe: pd.DataFrame) -> go.Figure:
-    view = dataframe[dataframe["estimated_occupancy_rate_l365d"].notna()].copy()
+    view = _priced_view(dataframe)
+    view = view[_valid_occupancy_listing_mask(view)].copy()
     if view.empty:
         return go.Figure()
+
     price_bins = [0, 750, 1100, 1500, 2000, 3000, np.inf]
     price_labels = [
         "< 750 THB",
@@ -463,20 +503,15 @@ def _build_price_vs_performance(dataframe: pd.DataFrame) -> go.Figure:
     summary = (
         view.groupby("price_range", observed=False)
         .agg(
-            median_occupancy_rate=("estimated_occupancy_rate_l365d", "median"),
             median_occupied_days=("estimated_occupancy_l365d", "median"),
-            listing_count=("listing_id", "count"),
+            listing_count=("listing_id", "nunique"),
             median_price=("price", "median"),
             median_estimated_revenue=("estimated_revenue_l365d", "median"),
         )
         .reset_index()
     )
     summary = summary[summary["listing_count"] >= 10].copy()
-    summary["price_range"] = pd.Categorical(
-        summary["price_range"],
-        categories=price_labels,
-        ordered=True,
-    )
+    summary["price_range"] = pd.Categorical(summary["price_range"], categories=price_labels, ordered=True)
     summary = summary.sort_values("price_range")
     if summary.empty:
         return go.Figure()
@@ -484,13 +519,13 @@ def _build_price_vs_performance(dataframe: pd.DataFrame) -> go.Figure:
     fig = px.bar(
         summary,
         x="price_range",
-        y="median_occupancy_rate",
+        y="median_occupied_days",
         labels={
             "price_range": "Listed Price Range",
-            "median_occupancy_rate": "Median Source-Estimated Occupancy Rate L365D",
+            "median_occupied_days": "Median Est. Occupied Days L365D",
         },
-        title="Median Est. Occupancy Rate by Price Range",
-        text_auto=".1%",
+        title="Median Est. Occupied Days by Price Range",
+        text_auto=".0f",
     )
     fig.update_traces(
         marker_color="#0F2742",
@@ -499,17 +534,16 @@ def _build_price_vs_performance(dataframe: pd.DataFrame) -> go.Figure:
                 summary["listing_count"],
                 summary["median_price"],
                 summary["median_estimated_revenue"],
-                summary["median_occupied_days"],
             ]
         ),
         hovertemplate=(
             "Listed price range: %{x}<br>"
-            "Median source-est. occupancy rate: %{y:.1%}<br>"
-            "Median est. occupied days L365D: %{customdata[3]:,.0f}<br>"
+            "Median estimated occupied days L365D: %{y:,.0f} days<br>"
             "Listing count: %{customdata[0]:,.0f}<br>"
             "Median listed price: %{customdata[1]:,.0f} THB<br>"
             "Median est. revenue: %{customdata[2]:,.0f} THB<extra></extra>"
         ),
+        texttemplate="%{y:,.0f} days",
         textposition="outside",
         cliponaxis=False,
     )
@@ -519,34 +553,29 @@ def _build_price_vs_performance(dataframe: pd.DataFrame) -> go.Figure:
         plot_bgcolor="white",
         paper_bgcolor="white",
         showlegend=False,
-        yaxis_tickformat=".0%",
         title_font=dict(size=18, color="#0F2742"),
+        yaxis_title="Median Est. Occupied Days L365D",
     )
     return fig
 
 
 def _prepare_quadrant_data(dataframe: pd.DataFrame) -> pd.DataFrame:
-    view = dataframe[dataframe["estimated_occupancy_rate_l365d"].notna()].copy()
+    view = dataframe[_valid_occupancy_listing_mask(dataframe)].copy()
     if view.empty:
         return view
 
     view["price_percentile_by_room_type"] = (
-        view.groupby("room_type")["price"]
-        .rank(pct=True, method="average")
-        .fillna(0)
+        view.groupby("room_type")["price"].rank(pct=True, method="average").fillna(0)
     )
-    view["occupancy_percentile"] = view["estimated_occupancy_rate_l365d"].rank(
+    view["occupancy_percentile"] = _valid_occupancy_rate_series(view).rank(
         pct=True,
         method="average",
     ).fillna(0)
 
     conditions = [
-        (view["price_percentile_by_room_type"] >= 0.75)
-        & (view["occupancy_percentile"] >= 0.5),
-        (view["price_percentile_by_room_type"] >= 0.75)
-        & (view["occupancy_percentile"] < 0.5),
-        (view["price_percentile_by_room_type"] < 0.75)
-        & (view["occupancy_percentile"] >= 0.5),
+        (view["price_percentile_by_room_type"] >= 0.75) & (view["occupancy_percentile"] >= 0.5),
+        (view["price_percentile_by_room_type"] >= 0.75) & (view["occupancy_percentile"] < 0.5),
+        (view["price_percentile_by_room_type"] < 0.75) & (view["occupancy_percentile"] >= 0.5),
     ]
     labels = [
         "Premium High-Perform",
@@ -558,12 +587,16 @@ def _prepare_quadrant_data(dataframe: pd.DataFrame) -> pd.DataFrame:
 
 
 def _style_watchlist(dataframe: pd.DataFrame) -> pd.io.formats.style.Styler:
+    occupancy_values = dataframe["Est. Occupied Days L365D"].dropna()
+    high_days_threshold = occupancy_values.quantile(0.75) if not occupancy_values.empty else np.nan
+    low_days_threshold = occupancy_values.quantile(0.25) if not occupancy_values.empty else np.nan
+
     def occupancy_style(value: float) -> str:
         if pd.isna(value):
             return ""
-        if value >= 0.7:
+        if pd.notna(high_days_threshold) and value >= high_days_threshold:
             return "background-color: #E6FFFA; color: #0F5132;"
-        if value < 0.4:
+        if pd.notna(low_days_threshold) and value <= low_days_threshold:
             return "background-color: #FFF1F2; color: #9B1C1C;"
         return ""
 
@@ -581,14 +614,15 @@ def _style_watchlist(dataframe: pd.DataFrame) -> pd.io.formats.style.Styler:
     styler = dataframe.style.format(
         {
             "Listed Price": "{:,.0f} THB",
-            "Est. Occupancy Rate L365D": "{:.1%}",
+            "Est. Occupied Days L365D": "{:,.0f} days",
             "Est. Revenue L365D": "{:,.0f} THB",
             "Review Score": "{:.2f}",
             "Reviews": "{:,.0f}",
             "Price / Person": "{:,.0f} THB",
-        }
+        },
+        na_rep="N/A",
     )
-    styler = styler.map(occupancy_style, subset=["Est. Occupancy Rate L365D"])
+    styler = styler.map(occupancy_style, subset=["Est. Occupied Days L365D"])
     styler = styler.map(review_style, subset=["Review Score"])
     return styler
 
@@ -604,6 +638,7 @@ def _build_top_performers(
         "room_type",
         "neighbourhood",
         "price",
+        "estimated_occupancy_l365d",
         "estimated_occupancy_rate_l365d",
         "estimated_revenue_l365d",
         "review_scores_rating",
@@ -614,7 +649,7 @@ def _build_top_performers(
     view = view[
         (view["price"] > 0)
         & view["estimated_revenue_l365d"].notna()
-        & view["estimated_occupancy_rate_l365d"].notna()
+        & _valid_occupancy_listing_mask(view)
     ].copy()
     if top_price_threshold is not None and not pd.isna(top_price_threshold):
         view = view[view["price"] < top_price_threshold].copy()
@@ -630,7 +665,7 @@ def _build_top_performers(
             "room_type": "Room Type",
             "neighbourhood": "Neighbourhood",
             "price": "Listed Price",
-            "estimated_occupancy_rate_l365d": "Est. Occupancy Rate L365D",
+            "estimated_occupancy_l365d": "Est. Occupied Days L365D",
             "estimated_revenue_l365d": "Est. Revenue L365D",
             "review_scores_rating": "Review Score",
             "number_of_reviews": "Reviews",
@@ -643,7 +678,7 @@ def _build_top_performers(
             "Neighbourhood",
             "Room Type",
             "Listed Price",
-            "Est. Occupancy Rate L365D",
+            "Est. Occupied Days L365D",
             "Est. Revenue L365D",
             "Review Score",
             "Reviews",
@@ -678,10 +713,7 @@ def _build_watchlist(
             and row["number_of_reviews"] >= low_review_count_threshold
         ):
             reasons.append("High Price + Low Review")
-        if (
-            high_price_within_room_type
-            and row["number_of_reviews"] < low_review_count_threshold
-        ):
+        if high_price_within_room_type and row["number_of_reviews"] < low_review_count_threshold:
             reasons.append("High Price + Low Review Count")
         return "; ".join(reasons)
 
@@ -700,7 +732,7 @@ def _build_watchlist(
             "room_type",
             "neighbourhood",
             "price",
-            "estimated_occupancy_rate_l365d",
+            "estimated_occupancy_l365d",
             "estimated_revenue_l365d",
             "review_scores_rating",
             "number_of_reviews",
@@ -715,7 +747,7 @@ def _build_watchlist(
             "room_type": "Room Type",
             "neighbourhood": "Neighbourhood",
             "price": "Listed Price",
-            "estimated_occupancy_rate_l365d": "Est. Occupancy Rate L365D",
+            "estimated_occupancy_l365d": "Est. Occupied Days L365D",
             "estimated_revenue_l365d": "Est. Revenue L365D",
             "review_scores_rating": "Review Score",
             "number_of_reviews": "Reviews",
@@ -730,7 +762,7 @@ def _build_watchlist(
             "Neighbourhood",
             "Room Type",
             "Listed Price",
-            "Est. Occupancy Rate L365D",
+            "Est. Occupied Days L365D",
             "Est. Revenue L365D",
             "Review Score",
             "Reviews",
@@ -754,91 +786,77 @@ def render_pricing_listing_performance() -> None:
     pricing = pricing.copy()
     pricing["estimated_occupancy_rate_l365d"] = (
         pricing["estimated_occupancy_l365d"] / 365.0
-    )
+    ).where(
+        pricing["estimated_occupancy_l365d"].between(0, 365, inclusive="both")
+    ).clip(lower=0, upper=1)
 
-    filters = _render_filters(pricing)
-    filtered = _apply_filters(
-        pricing,
-        filters,
-        apply_price_range=True,
-        apply_review_reliability=False,
-    )
-    filtered_review = _apply_filters(
-        pricing,
-        filters,
-        apply_price_range=True,
-        apply_review_reliability=True,
-    )
-    filtered_review_no_price_range = _apply_filters(
-        pricing,
-        filters,
-        apply_price_range=False,
-        apply_review_reliability=True,
-    )
-    filtered_no_price_range = _apply_filters(
-        pricing,
-        filters,
-        apply_price_range=False,
-        apply_review_reliability=False,
-    )
-    if filtered.empty:
+    priced_pricing = _priced_view(pricing)
+    if priced_pricing.empty:
+        st.warning("No listings with valid listed prices are available for pricing analysis.")
+        return
+
+    price_coverage_stats = _price_coverage_stats(pricing, priced_pricing)
+
+    filters = _render_filters(priced_pricing)
+    main_filtered = _apply_main_filters(priced_pricing, filters)
+    if main_filtered.empty:
         st.warning("No listings match the current filter set.")
         return
 
-    top_price_threshold = (
-        filtered_review_no_price_range.loc[
-            filtered_review_no_price_range["price"] > 0,
-            "price",
-        ].quantile(0.99)
-        if not filtered_review_no_price_range.empty
-        else np.nan
-    )
+    _render_kpis(main_filtered, price_coverage_stats)
 
-    _render_kpis(filtered_review)
+    p99_price = main_filtered["price"].quantile(0.99) if not main_filtered.empty else np.nan
 
     row_1_left, row_1_right = two_column_layout([1.15, 0.85])
     with row_1_left:
-        st.plotly_chart(_build_price_distribution(filtered), use_container_width=True)
+        st.plotly_chart(
+            _build_price_distribution(main_filtered),
+            use_container_width=True,
+            config=DEFAULT_PLOTLY_CONFIG,
+        )
         st.caption(
-            "Prices are capped at P99 for display readability only. Median and P75 are calculated from the full filtered dataset."
+            "Display capped at P99; median and P75 use the full filtered data."
         )
     with row_1_right:
-        st.plotly_chart(_build_price_by_segment(filtered), use_container_width=True)
+        st.plotly_chart(
+            _build_price_by_segment(main_filtered),
+            use_container_width=True,
+            config=DEFAULT_PLOTLY_CONFIG,
+        )
 
     row_2_left, row_2_right = two_column_layout([1.0, 1.2])
     with row_2_left:
-        matrix = _build_pricing_strategy_matrix(filtered)
+        matrix = _build_pricing_strategy_matrix(main_filtered)
         if matrix.data:
-            st.plotly_chart(matrix, use_container_width=True)
+            st.plotly_chart(matrix, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
             st.caption(
-                "Heatmap focuses on the 10 largest neighbourhoods by listing count. Cells with fewer than 10 listings are hidden to avoid unstable median values."
+                "Top 10 neighbourhoods; cells with fewer than 10 priced listings are hidden."
             )
         else:
             st.info("Not enough dense neighbourhood x room type combinations to render the pricing matrix.")
     with row_2_right:
-        perf = _build_price_vs_performance(filtered_no_price_range)
+        perf = _build_price_vs_performance(main_filtered)
         if perf.data:
-            st.plotly_chart(perf, use_container_width=True)
-            st.caption(
-                "This listed-price-range view ignores the Listed Price Range slicer to keep buckets comparable. Estimated occupancy is source-derived and used for relative comparison, not transaction-based booking occupancy."
-            )
+            st.plotly_chart(perf, use_container_width=True, config=DEFAULT_PLOTLY_CONFIG)
         else:
             st.info("Not enough listings with valid occupancy data to render the price-range performance view.")
 
     st.markdown("#### Listing Benchmark & Watchlist")
-    st.caption(
-        "Est. Occupancy Rate and Est. Revenue are source-derived estimated indicators used for relative comparison and drill-down analysis. They do not represent confirmed transaction-based booking results."
-    )
     top_tab, watchlist_tab = st.tabs(["Top Performers", "Watchlist"])
 
     with top_tab:
-        st.dataframe(
-            _style_watchlist(_build_top_performers(filtered_review, top_price_threshold)),
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.caption("Top 1% listed-price outliers are excluded.")
+        top_performers = _build_top_performers(main_filtered, p99_price)
+        if top_performers.empty:
+            st.info("No listings qualify for Top Performers under the current filters.")
+        else:
+            st.dataframe(
+                _style_watchlist(top_performers),
+                use_container_width=True,
+                hide_index=True,
+            )
     with watchlist_tab:
-        watchlist = _build_watchlist(filtered_review, top_price_threshold)
+        watchlist = _build_watchlist(main_filtered, p99_price)
         if watchlist.empty:
             st.info("No premium underperformers or top 1% price listings under the current filters.")
         else:
@@ -847,4 +865,3 @@ def render_pricing_listing_performance() -> None:
                 use_container_width=True,
                 hide_index=True,
             )
-    st.caption("Use this table for listing-level drill-down after reviewing the summary charts.")

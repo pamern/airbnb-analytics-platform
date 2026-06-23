@@ -5,6 +5,12 @@ from typing import Any, Sequence
 
 import streamlit as st
 
+DEFAULT_PLOTLY_CONFIG = {
+    "displayModeBar": False,
+    "displaylogo": False,
+    "responsive": True,
+}
+
 
 def inject_global_styles() -> None:
     st.markdown(
@@ -87,11 +93,12 @@ def inject_global_styles() -> None:
         .block-container {
             padding-top: 0.2rem !important;
             padding-bottom: 2rem !important;
-            max-width: 1200px;
+            max-width: 1800px;
+            width: 100%;
         }
 
         div[data-testid="stMetric"] {
-            min-height: 120px;
+            min-height: 108px;
         }
 
         div[data-testid="stMetricLabel"] p {
@@ -150,11 +157,14 @@ def render_metric_grid(
         row_metrics = metrics[start:start + cards_per_row]
         columns = st.columns(cards_per_row)
         for column, metric in zip(columns, row_metrics):
-            column.metric(
-                metric["label"],
-                metric["value"],
-                help=metric.get("help"),
-            )
+            with column:
+                st.metric(
+                    metric["label"],
+                    metric["value"],
+                    help=metric.get("help"),
+                )
+                if metric.get("caption"):
+                    st.caption(metric["caption"])
 
 
 def two_column_layout(spec: Sequence[float]) -> tuple[Any, Any]:
