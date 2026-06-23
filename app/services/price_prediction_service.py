@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -15,13 +16,17 @@ from utils.motherduck import close_connection, connect_motherduck
 from utils.sql import query_dataframe
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LOGGER = logging.getLogger(__name__)
 
 
 def get_active_price_champion() -> tuple[pd.Series | None, str | None]:
     registry, error = get_model_registry("price_model")
     if error:
         return None, error
-    champions = registry[registry["stage"].astype(str).str.upper().eq("CHAMPION") & registry["is_active"].fillna(False)]
+    champions = registry[
+        registry["stage"].astype(str).str.strip().str.upper().eq("CHAMPION")
+        & registry["is_active"].fillna(False)
+    ]
     if len(champions) != 1:
         return None, "No single active Price Model Champion is available."
     return champions.iloc[0], None
@@ -30,7 +35,7 @@ def get_active_price_champion() -> tuple[pd.Series | None, str | None]:
 def get_price_candidates() -> QueryResult:
     return _read(
         """select model_version, created_at, artifact_path from mlops.model_registry
-           where model_name = 'price_model' and stage = 'CANDIDATE' and is_active = false
+           where model_name = 'price_model' and upper(trim(stage)) = 'CANDIDATE' and is_active = false
            order by created_at desc"""
     )
 
@@ -91,23 +96,40 @@ def get_comparable_listings(input_data: dict[str, Any]) -> QueryResult:
 def set_price_champion(candidate_version: str, promoted_by: str = "streamlit") -> str | None:
     """Promote one verified candidate atomically; callers must collect confirmation first."""
     connection = None
+    transaction_started = False
     try:
         connection = connect_motherduck(read_only=False)
         connection.execute("begin transaction")
-        candidate = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = 'price_model' and model_version = ? and stage = 'CANDIDATE' and is_active = false", [candidate_version])
-        champion = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = 'price_model' and stage = 'CHAMPION' and is_active = true", [])
+        transaction_started = True
+        candidate = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = 'price_model' and model_version = ? and upper(trim(stage)) = 'CANDIDATE' and is_active = false", [candidate_version])
+        champion = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = 'price_model' and upper(trim(stage)) = 'CHAMPION' and is_active = true", [])
         if len(candidate) != 1 or len(champion) != 1:
             connection.execute("rollback")
+            transaction_started = False
             return "Promotion requires exactly one active Champion and one inactive Candidate."
-        connection.execute("update mlops.model_registry set stage = 'ARCHIVED', is_active = false where model_name = 'price_model' and stage = 'CHAMPION' and is_active = true")
-        connection.execute("update mlops.model_registry set stage = 'CHAMPION', is_active = true, promoted_at = current_timestamp, promoted_by = ? where model_name = 'price_model' and model_version = ? and stage = 'CANDIDATE' and is_active = false", [promoted_by, candidate_version])
+        connection.execute("update mlops.model_registry set stage = 'ARCHIVED', is_active = false where model_name = 'price_model' and upper(trim(stage)) = 'CHAMPION' and is_active = true")
+        connection.execute("update mlops.model_registry set stage = 'CHAMPION', is_active = true, promoted_at = current_timestamp, promoted_by = ? where model_name = 'price_model' and model_version = ? and upper(trim(stage)) = 'CANDIDATE' and is_active = false", [promoted_by, candidate_version])
+        verified = query_dataframe(
+            connection,
+            "select model_version from mlops.model_registry where model_name = 'price_model' and upper(trim(stage)) = 'CHAMPION' and is_active = true",
+            [],
+        )
+        if len(verified) != 1 or str(verified.iloc[0]["model_version"]) != candidate_version:
+            connection.execute("rollback")
+            transaction_started = False
+            return "Promotion verification failed; the registry transaction was rolled back."
         connection.execute("commit")
-        _read.clear()
+        transaction_started = False
+        st.cache_data.clear()
         return None
     except Exception:
-        if connection is not None:
-            try: connection.execute("rollback")
-            except Exception: pass
+        LOGGER.exception("Price Champion promotion failed")
+        if connection is not None and transaction_started:
+            try:
+                connection.execute("rollback")
+            except Exception:
+                LOGGER.exception("Price Champion promotion rollback failed")
         return "Promotion failed and the registry transaction was rolled back."
     finally:
-        if connection is not None: close_connection(connection)
+        if connection is not None:
+            close_connection(connection)

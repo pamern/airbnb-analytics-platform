@@ -1,7 +1,8 @@
-"""Cached, read-only access to model-performance warehouse tables."""
+"""Cached application-side access to model-performance warehouse tables."""
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -13,17 +14,19 @@ from utils.motherduck import close_connection, connect_motherduck
 from utils.sql import query_dataframe
 
 QueryResult = tuple[pd.DataFrame, str | None]
+LOGGER = logging.getLogger(__name__)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _read(sql: str, parameters: tuple[Any, ...] = ()) -> QueryResult:
-    """Run one parameterized read query and turn infrastructure failures into UI state."""
+    """Run one parameterized query and turn infrastructure failures into UI state."""
     connection = None
     try:
-        connection = connect_motherduck(read_only=True)
+        connection = connect_motherduck(read_only=False)
         return query_dataframe(connection, sql, list(parameters)), None
-    except Exception as exc:  # database availability must not break the page
-        return pd.DataFrame(), str(exc)
+    except Exception:  # database availability must not break the page
+        LOGGER.exception("Model-performance warehouse query failed")
+        return pd.DataFrame(), "Model-performance data is temporarily unavailable."
     finally:
         if connection is not None:
             close_connection(connection)

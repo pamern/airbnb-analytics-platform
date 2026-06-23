@@ -99,7 +99,7 @@ left join silver.silver_reviews as silver_review
 @st.cache_data(ttl=900, show_spinner=False)
 def load_pricing_dataset() -> pd.DataFrame:
     """Load the listing-level dataset used by the pricing dashboard page."""
-    connection = connect_motherduck(read_only=True)
+    connection = connect_motherduck(read_only=False)
     try:
         dataset = query_dataframe(connection, PRICING_DATASET_SQL)
     finally:
@@ -146,7 +146,7 @@ def load_pricing_dataset() -> pd.DataFrame:
 @st.cache_data(ttl=900, show_spinner=False)
 def load_host_quality_dataset() -> pd.DataFrame:
     """Load the listing-host snapshot dataset used by the host quality page."""
-    connection = connect_motherduck(read_only=True)
+    connection = connect_motherduck(read_only=False)
     try:
         dataset = query_dataframe(connection, HOST_QUALITY_DATASET_SQL)
     finally:
@@ -183,7 +183,7 @@ def load_host_quality_dataset() -> pd.DataFrame:
 @st.cache_data(ttl=900, show_spinner=False)
 def load_review_events_dataset() -> pd.DataFrame:
     """Load review-event data for trend and comment-rate analysis."""
-    connection = connect_motherduck(read_only=True)
+    connection = connect_motherduck(read_only=False)
     try:
         dataset = query_dataframe(connection, REVIEW_EVENTS_DATASET_SQL)
     finally:
