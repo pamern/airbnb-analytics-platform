@@ -22,7 +22,11 @@ class AnalyticsDbtTranslator(DagsterDbtTranslator):
 )
 def airbnb_analytics_dbt_assets(context: AssetExecutionContext, dbt: DbtCliResource):
     """Build Silver and Gold analytics models, including ML feature tables and tests."""
-    yield from dbt.cli(["build"], context=context).stream()
+    yield from dbt.cli(
+        ["build"],
+        context=context,
+        target_path=dbt_project.target_path,
+    ).stream()
 
 
 # Preserve the object name consumed by the four existing ML-job definitions.

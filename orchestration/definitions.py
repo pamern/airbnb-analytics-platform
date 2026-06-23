@@ -1,6 +1,6 @@
 """Single Dagster Definitions entry point: ``dagster dev -m orchestration.definitions``."""
 
-from dagster import Definitions
+from dagster import Definitions, ScheduleDefinition
 
 from orchestration.assets.dbt_assets import airbnb_gold_dbt_assets
 from orchestration.assets.ingestion_assets import bronze_calendar, bronze_listings, bronze_neighbourhoods, bronze_reviews, raw_source_validation
@@ -30,9 +30,17 @@ from orchestration.resources.dbt import build_dbt_resource
 from orchestration.resources.inference import InferenceConfig
 from orchestration.resources.motherduck import MotherDuckResource
 
+daily_data_pipeline_schedule = ScheduleDefinition(
+    name="daily_data_pipeline_schedule",
+    job=data_refresh_job,
+    cron_schedule="36 13 * * *",
+    execution_timezone="Asia/Ho_Chi_Minh",
+)
+
 defs = Definitions(
     assets=[raw_source_validation, bronze_listings, bronze_calendar, bronze_reviews, bronze_neighbourhoods, airbnb_gold_dbt_assets, price_training_result, price_model_artifact, price_registry_records, gold_price_predictions, segmentation_training_result, segmentation_model_artifact, segmentation_registry_records, gold_listing_segments, gold_segment_profiles, current_price_champion, price_batch_predictions, write_price_batch_predictions, current_segmentation_champion, segmentation_assignments, write_segmentation_assignments],
     asset_checks=[price_training_check, segmentation_training_check, price_prediction_check, segmentation_assignment_check],
     jobs=[bronze_ingestion_job, dbt_analytics_build_job, price_retraining_job, price_prediction_job, segmentation_retraining_job, segmentation_assignment_job, data_refresh_job],
     resources={"motherduck": MotherDuckResource(), "dbt": build_dbt_resource(), "inference_config": InferenceConfig()},
+    schedules=[daily_data_pipeline_schedule],
 )
