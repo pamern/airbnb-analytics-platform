@@ -14,7 +14,7 @@ load_dotenv(dotenv_path=ENV_FILE, override=False)
 
 
 def _get_setting(name: str, default: str = "") -> str:
-    """Đọc cấu hình từ biến môi trường hoặc Streamlit Secrets hoặc st.session_state."""
+    """Đọc cấu hình từ Streamlit Secrets hoặc st.session_state, fallback sang getenv ngoài Streamlit."""
     try:
         import streamlit as st
         if name in st.session_state and st.session_state[name]:
@@ -22,15 +22,16 @@ def _get_setting(name: str, default: str = "") -> str:
     except Exception:
         pass
 
-    val = getenv(name)
-    if val is not None and val.strip() != "":
-        return val
     try:
         import streamlit as st
         if name in st.secrets:
             return str(st.secrets[name])
     except Exception:
         pass
+
+    val = getenv(name)
+    if val is not None and val.strip() != "":
+        return val
     return default
 
 
