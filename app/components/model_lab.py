@@ -344,6 +344,7 @@ def _price_model(filters: dict[str, object]) -> None:
         if predictions.empty: st.info("No evaluation predictions are available for this model version.")
         else: _price_scatter_and_residual(predictions, version); _error_by_band(predictions)
     _shap_views(version); _metric_trend(current); _tables("price_model", registry, current)
+    _promotion_controls()
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -598,12 +599,11 @@ def _prediction_runner() -> None:
             history = st.session_state.setdefault("recent_price_predictions", []); history.insert(0, {"Time": result["time"], "Model Version": prediction.model_version, "Predicted Price": prediction.predicted_price, "Neighbourhood": result["inputs"].get("neighbourhood"), "Room Type": result["inputs"].get("room_type")})
             _section("Recent Predictions", "Session-only history; no predictions are written to the warehouse.")
             st.dataframe(pd.DataFrame(history[:10]), use_container_width=True, hide_index=True)
-    _promotion_controls()
+
 
 
 def render_model_lab_page() -> None:
-    performance_tab, run_tab, cluster_tab, future_tab = st.tabs(["Model Performance", "Price Prediction", "Cluster", "Model 3"])
+    performance_tab, run_tab = st.tabs(["Model Performance", "Price Prediction"])
     with performance_tab: _performance()
     with run_tab: _prediction_runner()
-    with cluster_tab: st.info("Cluster exploration workspace. Use Model Performance to review registered segmentation results.")
-    with future_tab: st.info("Workspace reserved for a future model.")
+

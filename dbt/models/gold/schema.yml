@@ -465,3 +465,140 @@ models:
         description: Natural-log transformed listing price, calculated as ln(1 + price), used as the prediction target.
         tests:
           - not_null
+
+  - name: mart_dashboard_listing_snapshot
+    description: Listing-grain dashboard mart with snapshot, listing, host, and location fields pre-joined for fast Streamlit reads.
+    columns:
+      - name: listing_id
+        description: Natural listing identifier and unique row key for dashboard snapshot pages.
+        tests:
+          - not_null
+          - unique
+      - name: host_id
+        description: Natural host identifier.
+      - name: neighbourhood
+        description: Listing neighbourhood with UNKNOWN fallback.
+        tests:
+          - not_null
+      - name: room_type
+        description: Listing room type with UNKNOWN fallback.
+        tests:
+          - not_null
+      - name: price
+        description: Current listing snapshot price.
+        tests:
+          - positive_or_null
+      - name: estimated_occupancy_rate_l365d
+        description: Estimated occupied days divided by 365 when the occupied-day estimate is within 0 to 365.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: is_reliable_review
+        description: Dashboard flag for listings with at least 5 reviews and a non-null rating.
+        tests:
+          - not_null
+      - name: host_size_group
+        description: Dashboard host-size bucket derived from host_total_listings_count.
+        tests:
+          - accepted_values:
+              arguments:
+                values: ["Solo", "Small", "Medium", "Large", "Unknown"]
+      - name: review_quality_band
+        description: Dashboard review-quality bucket derived from review count and rating.
+        tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - Insufficient Evidence
+                  - Low Rating
+                  - Moderate
+                  - Good
+                  - Excellent
+
+  - name: mart_dashboard_listing_monthly_availability
+    description: Listing-month dashboard mart with daily availability pre-aggregated for the Location & Availability tab.
+    tests:
+      - unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - listing_id
+              - calendar_month
+    columns:
+      - name: listing_id
+        description: Natural listing identifier.
+        tests:
+          - not_null
+      - name: listing_key
+        description: Surrogate listing key carried for existing dashboard validation.
+        tests:
+          - not_null
+      - name: calendar_month
+        description: Month bucket derived from the availability calendar date.
+        tests:
+          - not_null
+      - name: neighbourhood
+        description: Listing neighbourhood with UNKNOWN fallback.
+        tests:
+          - not_null
+      - name: room_type
+        description: Listing room type with UNKNOWN fallback.
+        tests:
+          - not_null
+      - name: available_days
+        description: Count of available calendar days for the listing-month.
+        tests:
+          - non_negative
+      - name: observed_days
+        description: Count of observed calendar rows for the listing-month.
+        tests:
+          - greater_than:
+              arguments:
+                value: 0
+      - name: availability_share
+        description: Available days divided by observed days for the listing-month.
+        tests:
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: median_calendar_minimum_nights
+        description: Median positive minimum-nights value for the listing-month.
+        tests:
+          - positive_or_null
+
+  - name: mart_dashboard_listing_review_recency
+    description: Listing-grain review recency mart for the Host & Review Quality watchlist.
+    columns:
+      - name: listing_id
+        description: Natural listing identifier and unique row key for listing review recency.
+        tests:
+          - not_null
+          - unique
+      - name: last_review_date
+        description: Latest observed review date for the listing.
+        tests:
+          - not_null
+      - name: review_event_count
+        description: Number of review events observed for the listing.
+        tests:
+          - greater_than:
+              arguments:
+                value: 0
+      - name: comment_count
+        description: Number of review events with comments for the listing.
+        tests:
+          - non_negative
+      - name: has_any_comment
+        description: Whether the listing has at least one review event with a comment.
+        tests:
+          - not_null
+      - name: global_latest_review_date
+        description: Latest review date across the full review dataset.
+        tests:
+          - not_null
+      - name: days_since_last_review
+        description: Day difference between global_latest_review_date and last_review_date.
+        tests:
+          - non_negative

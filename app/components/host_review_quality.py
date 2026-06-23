@@ -5,7 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.data_access import load_host_quality_dataset, load_review_events_dataset
+from app.data_access import load_host_quality_dataset, load_listing_review_recency_dataset
 from components.ui import DEFAULT_PLOTLY_CONFIG, render_metric_grid, two_column_layout
 
 
@@ -83,11 +83,9 @@ def _render_filters(host_quality: pd.DataFrame) -> dict[str, object]:
 
 def _apply_filters(
     host_quality: pd.DataFrame,
-    review_events: pd.DataFrame,
     filters: dict[str, object],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     host_view = host_quality.copy()
-    review_view = review_events.copy()
 
     selected_neighbourhoods = filters["selected_neighbourhoods"]
     selected_room_types = filters["selected_room_types"]
@@ -96,19 +94,14 @@ def _apply_filters(
 
     if selected_neighbourhoods:
         host_view = host_view[host_view["neighbourhood"].isin(selected_neighbourhoods)]
-        review_view = review_view[review_view["neighbourhood"].isin(selected_neighbourhoods)]
     if selected_room_types:
         host_view = host_view[host_view["room_type"].isin(selected_room_types)]
-        review_view = review_view[review_view["room_type"].isin(selected_room_types)]
     if selected_host_sizes:
         host_view = host_view[host_view["host_size_group"].isin(selected_host_sizes)]
     if verified_only:
         host_view = host_view[host_view["host_identity_verified"].fillna(False)]
 
-    if not host_view.empty:
-        review_view = review_view[review_view["listing_id"].isin(host_view["listing_id"].unique())]
-
-    return host_view, review_view
+    return host_view
 
 
 def _render_kpis(host_view: pd.DataFrame) -> None:
@@ -699,7 +692,7 @@ def _build_review_watchlist_table(
 def render_host_review_quality() -> None:
     try:
         host_quality = load_host_quality_dataset()
-        review_events = load_review_events_dataset()
+        review_recency = load_listing_review_recency_dataset()
     except Exception as exc:  # pragma: no cover
         st.error(f"Cannot load host & review quality data from Gold layer.\n\nError: {exc}")
         return
@@ -709,23 +702,35 @@ def render_host_review_quality() -> None:
         return
 
     host_quality = host_quality.copy()
-    host_quality["host_size_group"] = host_quality["host_total_listings_count"].apply(
-        _assign_host_size_group
-    )
-    host_quality["is_reliable_review"] = (
-        host_quality["review_scores_rating"].notna()
-        & (host_quality["number_of_reviews"] >= 5)
+    if "host_size_group" not in host_quality.columns:
+        host_quality["host_size_group"] = host_quality["host_total_listings_count"].apply(
+            _assign_host_size_group
+        )
+    if "is_reliable_review" not in host_quality.columns:
+        host_quality["is_reliable_review"] = (
+            host_quality["review_scores_rating"].notna()
+            & (host_quality["number_of_reviews"] >= 5)
+        )
+
+    global_review_reference_date = review_recency["global_latest_review_date"].max()
+    host_quality = host_quality.merge(
+        review_recency.loc[
+            :,
+            [
+                "listing_id",
+                "last_review_date",
+                "review_event_count",
+                "comment_count",
+                "has_any_comment",
+                "days_since_last_review",
+            ],
+        ],
+        on="listing_id",
+        how="left",
     )
 
     filters = _render_filters(host_quality)
-    host_view, review_view = _apply_filters(host_quality, review_events, filters)
-    global_review_reference_date = review_events["review_date"].max()
-    latest_review_by_listing = (
-        review_view.dropna(subset=["review_date"])
-        .groupby("listing_id", as_index=False)
-        .agg(last_review_date=("review_date", "max"))
-    )
-    host_view = host_view.merge(latest_review_by_listing, on="listing_id", how="left")
+    host_view = _apply_filters(host_quality, filters)
 
     if host_view.empty:
         st.warning("No host or listing records match the current filter set.")
