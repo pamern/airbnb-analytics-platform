@@ -134,11 +134,18 @@ def _version(registry: pd.DataFrame, requested: str | None) -> str | None:
 
 
 def _metric(metrics: pd.DataFrame, key: str, version: str | None, test_only: bool = True) -> object:
+    if metrics.empty:
+        return None
     values = metrics.copy()
-    if version: values = values[values["model_version"].astype(str).eq(version)]
-    if test_only: values = values[values["dataset_split"].astype(str).str.upper().eq("TEST")]
-    values = values[values["metric_name"].astype(str).str.lower().eq(key)]
-    return None if values.empty else values.iloc[0]["metric_value"]
+    if "model_version" in values.columns and version:
+        values = values[values["model_version"].astype(str).eq(version)]
+    if "dataset_split" in values.columns and test_only:
+        values = values[values["dataset_split"].astype(str).str.upper().eq("TEST")]
+    if "metric_name" in values.columns:
+        values = values[values["metric_name"].astype(str).str.lower().eq(key)]
+    if values.empty or "metric_value" not in values.columns:
+        return None
+    return values.iloc[0]["metric_value"]
 
 
 def _tables(model_name: str, registry: pd.DataFrame, filters: dict[str, object]) -> None:
