@@ -121,6 +121,11 @@ def _version(registry: pd.DataFrame, requested: str | None) -> str | None:
 
 
 def _metric(metrics: pd.DataFrame, key: str, version: str | None, test_only: bool = True) -> object:
+    required_columns = {"model_version", "metric_name", "metric_value"}
+    if test_only:
+        required_columns.add("dataset_split")
+    if metrics.empty or not required_columns.issubset(metrics.columns):
+        return None
     values = metrics.copy()
     if version: values = values[values["model_version"].astype(str).eq(version)]
     if test_only: values = values[values["dataset_split"].astype(str).str.upper().eq("TEST")]
