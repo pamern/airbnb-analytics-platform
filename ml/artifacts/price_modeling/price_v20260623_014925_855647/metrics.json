@@ -1,0 +1,14 @@
+{
+  "rmse": 0.39315214096560236,
+  "mae": 0.26689684437901023,
+  "r2": 0.7296577928487176,
+  "adjusted_r2": 0.7252898183226925,
+  "predict_time_seconds": 0.3082392999995136,
+  "prediction_interval_coverage": 0.8949516648764769,
+  "mean_prediction_interval_width": 2501.455895464842,
+  "median_prediction_interval_width": 2678.6127828216804,
+  "mean_interval_width_ratio": 1.8556671771767428,
+  "conformal_q_hat": 1339.3063914108402,
+  "conformal_target_coverage": 0.9,
+  "calibration_sample_size": 4655.0
+}
