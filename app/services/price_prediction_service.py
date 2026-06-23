@@ -16,6 +16,7 @@ import streamlit as st
 from services.model_performance_service import QueryResult, _read, get_model_metrics, get_model_registry
 from utils.motherduck import close_connection, connect_motherduck
 from utils.sql import query_dataframe
+from ml.common.object_storage import ObjectStorageError, materialize_artifact
 from ml.price_modeling.preprocessing import group_property_type
 from ml.price_modeling.conformal import build_prediction_interval
 
@@ -63,7 +64,7 @@ def get_price_input_features(champion: pd.Series | None) -> tuple[list[str], str
     if champion is None:
         return [], "No active Price Model Champion is available."
     artifact_path = str(champion.get("artifact_path", ""))
-    model_path, error = _safe_artifact_path(artifact_path)
+    model_path, error = _safe_artifact_path(artifact_path, str(champion.get("model_version", "legacy")))
     if error or model_path is None:
         return [], error
     try:
@@ -172,7 +173,13 @@ def get_price_model_metrics(model_version: str) -> QueryResult:
     return get_model_metrics("price_model", model_version)
 
 
-def _safe_artifact_path(artifact_path: str) -> tuple[Path | None, str | None]:
+def _safe_artifact_path(artifact_path: str, model_version: str = "legacy") -> tuple[Path | None, str | None]:
+    artifact_path = artifact_path.strip()
+    if artifact_path.startswith("s3://"):
+        try:
+            return materialize_artifact(artifact_path, "price_model", model_version), None
+        except ObjectStorageError as error:
+            return None, str(error)
     candidate = Path(artifact_path)
     resolved = (PROJECT_ROOT / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
     try:
@@ -184,7 +191,7 @@ def _safe_artifact_path(artifact_path: str) -> tuple[Path | None, str | None]:
 
 @st.cache_resource(show_spinner=False)
 def load_price_model_artifact(model_version: str, artifact_path: str) -> tuple[Any | None, str | None]:
-    path, error = _safe_artifact_path(artifact_path)
+    path, error = _safe_artifact_path(artifact_path, model_version)
     if error:
         return None, error
     try:

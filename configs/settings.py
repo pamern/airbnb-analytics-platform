@@ -56,6 +56,16 @@ class StreamlitSettings:
     server_port: int
 
 
+@dataclass(frozen=True)
+class ObjectStorageSettings:
+    endpoint_url: str
+    access_key_id: str
+    secret_access_key: str
+    bucket_name: str
+    region: str
+    prefix: str
+
+
 ServiceName = Literal["motherduck", "llm", "streamlit"]
 
 
@@ -77,6 +87,15 @@ LLM = LLMSettings(
 
 STREAMLIT = StreamlitSettings(
     server_port=_get_int("STREAMLIT_SERVER_PORT", 8501),
+)
+
+OBJECT_STORAGE = ObjectStorageSettings(
+    endpoint_url=getenv("OBJECT_STORAGE_ENDPOINT_URL", getenv("R2_ENDPOINT_URL", "")),
+    access_key_id=getenv("OBJECT_STORAGE_ACCESS_KEY_ID", getenv("R2_ACCESS_KEY_ID", "")),
+    secret_access_key=getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY", getenv("R2_SECRET_ACCESS_KEY", "")),
+    bucket_name=getenv("OBJECT_STORAGE_BUCKET_NAME", getenv("R2_BUCKET_NAME", "")),
+    region=getenv("OBJECT_STORAGE_REGION", "auto"),
+    prefix=getenv("OBJECT_STORAGE_PREFIX", "airbnb-models").strip("/"),
 )
 
 def validate_required_settings(service: ServiceName | None = None) -> list[str]:

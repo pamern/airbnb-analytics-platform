@@ -12,6 +12,7 @@ import pandas as pd
 from dagster import AssetKey, asset
 
 from ml.common.paths import REPO_ROOT
+from ml.common.object_storage import materialize_artifact
 from ml.listing_segmentation.prediction import assign_clusters, load_segmentation_model
 from ml.price_modeling.conformal import build_prediction_interval
 from ml.price_modeling.prediction import load_price_artifact, predict_price
@@ -37,14 +38,13 @@ class RegisteredModel:
 
     model_version: str
     artifact_path: Path
+    artifact_uri: str
     model_name: str
     stage: str
 
 
-def _resolve_artifact_path(value: object) -> Path:
-    path = Path(str(value))
-    resolved = path if path.is_absolute() else REPO_ROOT / path
-    return resolved.resolve()
+def _resolve_artifact_path(value: object, model_name: str, model_version: str) -> Path:
+    return materialize_artifact(str(value), model_name, model_version)
 
 
 def select_registered_model(records: pd.DataFrame, *, model_name: str) -> RegisteredModel:
@@ -59,10 +59,12 @@ def select_registered_model(records: pd.DataFrame, *, model_name: str) -> Regist
     if len(champions) != 1:
         raise RuntimeError(f"Expected exactly one active CHAMPION for {model_name}, found {len(champions)}")
     selected = champions.iloc[0]
-    path = _resolve_artifact_path(selected["artifact_path"])
+    version = str(selected["model_version"])
+    uri = str(selected["artifact_path"])
+    path = _resolve_artifact_path(uri, model_name, version)
     if not path.is_file():
         raise FileNotFoundError(f"Registered artifact is unavailable for {model_name}: {path}")
-    return RegisteredModel(str(selected["model_version"]), path, str(selected["model_name"]), str(selected["stage"]))
+    return RegisteredModel(version, path, uri, str(selected["model_name"]), str(selected["stage"]))
 
 
 def _lookup_model(motherduck: MotherDuckResource, *, model_name: str) -> RegisteredModel:
@@ -142,7 +144,7 @@ def current_segmentation_champion(context, motherduck: MotherDuckResource) -> Re
 @asset(deps=[AssetKey(["gold", "gold_price_model_features"])], group_name="price")
 def price_batch_predictions(context, current_price_champion: RegisteredModel, motherduck: MotherDuckResource) -> pd.DataFrame:
     """Score at most 100 unseen, feature-changed, or previous-model listings."""
-    start_run(motherduck, run_id=context.run_id, job_name="price_prediction_job", model_name=PRICE_MODEL_NAME, model_version=current_price_champion.model_version, run_type="PRICE_PREDICTION", artifact_path=str(current_price_champion.artifact_path.relative_to(REPO_ROOT)))
+    start_run(motherduck, run_id=context.run_id, job_name="price_prediction_job", model_name=PRICE_MODEL_NAME, model_version=current_price_champion.model_version, run_type="PRICE_PREDICTION", artifact_path=current_price_champion.artifact_uri)
     try:
         query, parameters = build_candidate_query(feature_table=PRICE_TABLE, result_table=PRICE_PREDICTIONS_TABLE, result_time_column="predicted_at", model_version=current_price_champion.model_version, result_type_filter="batch")
         data = motherduck.query_df(query, parameters)
@@ -171,7 +173,7 @@ def price_batch_predictions(context, current_price_champion: RegisteredModel, mo
 @asset(deps=[AssetKey(["gold", "gold_cluster_model_features"])], group_name="segmentation")
 def segmentation_assignments(context, current_segmentation_champion: RegisteredModel, motherduck: MotherDuckResource) -> pd.DataFrame:
     """Assign at most 100 stale listings using the Champion without fitting anything."""
-    start_run(motherduck, run_id=context.run_id, job_name="segmentation_assignment_job", model_name=SEGMENTATION_MODEL_NAME, model_version=current_segmentation_champion.model_version, run_type="SEGMENTATION_ASSIGNMENT", artifact_path=str(current_segmentation_champion.artifact_path.relative_to(REPO_ROOT)))
+    start_run(motherduck, run_id=context.run_id, job_name="segmentation_assignment_job", model_name=SEGMENTATION_MODEL_NAME, model_version=current_segmentation_champion.model_version, run_type="SEGMENTATION_ASSIGNMENT", artifact_path=current_segmentation_champion.artifact_uri)
     try:
         query, parameters = build_candidate_query(feature_table=SEGMENTATION_TABLE, result_table=SEGMENT_ASSIGNMENTS_TABLE, result_time_column="assigned_at", model_version=current_segmentation_champion.model_version)
         data = motherduck.query_df(query, parameters)

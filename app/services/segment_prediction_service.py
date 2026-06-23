@@ -16,6 +16,7 @@ import streamlit as st
 from services.model_performance_service import QueryResult, _read, get_model_registry
 from services.price_prediction_service import get_selectable_model_versions, set_model_champion
 from ml.price_modeling.preprocessing import group_property_type
+from ml.common.object_storage import ObjectStorageError, materialize_artifact
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -51,7 +52,11 @@ def set_segmentation_champion(selected_version: str, promoted_by: str = "streaml
     return set_model_champion(SEGMENT_MODEL_NAME, selected_version, promoted_by)
 
 
-def _artifact_path(value: str) -> Path | None:
+def _artifact_path(value: str, model_version: str = "legacy") -> Path | None:
+    value = value.strip()
+    if value.startswith("s3://"):
+        try: return materialize_artifact(value, SEGMENT_MODEL_NAME, model_version)
+        except ObjectStorageError: return None
     candidate = Path(value); resolved = (PROJECT_ROOT / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
     try: resolved.relative_to(PROJECT_ROOT)
     except ValueError: return None
@@ -60,7 +65,7 @@ def _artifact_path(value: str) -> Path | None:
 
 def get_segment_input_features(champion: pd.Series | None) -> tuple[list[str], str | None]:
     if champion is None: return [], "Segment prediction is unavailable for the active Segment Champion."
-    path = _artifact_path(str(champion.get("artifact_path", "")))
+    path = _artifact_path(str(champion.get("artifact_path", "")), str(champion.get("model_version", "legacy")))
     if path is None: return [], "Segment prediction is unavailable for the active Segment Champion."
     try:
         features = json.loads((path.parent / "feature_schema.json").read_text(encoding="utf-8")).get("features")
@@ -91,7 +96,7 @@ def build_segment_input_frame(form_values: dict[str, Any], expected_features: li
 
 @st.cache_resource(show_spinner=False)
 def _load_segment_artifact(model_version: str, artifact_path: str) -> Any | None:
-    path = _artifact_path(artifact_path)
+    path = _artifact_path(artifact_path, model_version)
     if path is None: return None
     try: return joblib.load(path)
     except Exception: LOGGER.exception("Could not load Segment Champion artifact %s", model_version); return None
@@ -105,7 +110,8 @@ def predict_listing_segment(input_data: dict[str, Any], champion: pd.Series) -> 
         frame = build_segment_input_frame(input_data, features)
         model = artifact.get("model") if isinstance(artifact, dict) and "model" in artifact else artifact
         cluster_id = int(np.asarray(model.predict(frame.loc[:, features])).reshape(-1)[0])
-        mapping_path = _artifact_path(str(champion["artifact_path"])).parent / "cluster_mapping.json"
+        model_path = _artifact_path(str(champion["artifact_path"]), str(champion["model_version"]))
+        mapping_path = model_path.parent / "cluster_mapping.json" if model_path is not None else Path()
         mapping = json.loads(mapping_path.read_text(encoding="utf-8")) if mapping_path.is_file() else {}
         distance = None
         if hasattr(model, "transform"):

@@ -43,3 +43,4 @@ dbt/.user.yml
 .gemini/
 .tmp_dagster_home_*/
 .dagster/
+.cache/model_artifacts/

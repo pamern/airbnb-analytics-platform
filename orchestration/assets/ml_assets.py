@@ -25,6 +25,7 @@ from orchestration.mlops import (
     ensure_mlops_tables,
 )
 from ml.common.paths import REPO_ROOT
+from ml.common.object_storage import upload_artifact_directory
 
 PRICE_TABLE = "gold.gold_price_model_features"
 SEGMENTATION_TABLE = "gold.gold_cluster_model_features"
@@ -108,7 +109,11 @@ def _prepare_shap_importance_rows(rows: pd.DataFrame) -> pd.DataFrame:
 
 def _write_registry(motherduck: MotherDuckResource, result: Any, model_name: str, run_type: str, importance: pd.DataFrame | None = None) -> int:
     now = datetime.now(timezone.utc)
-    artifact_path = _relative_artifact_path(result.artifact_paths["model"])
+    artifact_path = upload_artifact_directory(
+        result.artifact_paths["model"].parent,
+        model_name,
+        result.model_version,
+    )
     run = pd.DataFrame([{"run_id": result.run["run_id"], "job_name": f"{model_name}_retraining_job", "model_name": model_name, "model_version": result.model_version, "run_type": run_type, "status": "SUCCESS", "feature_snapshot": None, "started_at": result.run["started_at"], "completed_at": now, "artifact_path": artifact_path, "error_message": None, "created_at": now}])
     registry = pd.DataFrame([{"model_name": model_name, "model_version": result.model_version, "run_id": result.run["run_id"], "stage": "CANDIDATE", "is_active": False, "artifact_path": artifact_path, "preprocessor_path": artifact_path, "created_at": now, "promoted_at": None, "promoted_by": None}])
     metrics = result.metric_records.rename(columns={"dataset_type": "dataset_split", "evaluated_at": "created_at"}).copy()

@@ -30,4 +30,5 @@ dependencies = [
     "xgboost>=3.2.0",
     "grpcio>=1.81.1",
     "grpcio-health-checking>=1.81.1",
+    "boto3>=1.43.36",
 ]

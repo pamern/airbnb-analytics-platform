@@ -14,6 +14,7 @@ import streamlit as st
 
 from utils.motherduck import close_connection, connect_motherduck
 from utils.sql import query_dataframe
+from ml.common.object_storage import ObjectStorageError, materialize_artifact
 
 QueryResult = tuple[pd.DataFrame, str | None]
 LOGGER = logging.getLogger(__name__)
@@ -197,7 +198,14 @@ def get_cluster_pca_data(model_version: str | None) -> QueryResult:
 
 def resolve_price_shap_artifacts(champion: pd.Series) -> tuple[dict[str, Path] | None, str | None]:
     """Resolve SHAP files only from the registry-selected Champion directory."""
-    artifact = Path(str(champion.get("artifact_path", "")))
+    artifact_uri = str(champion.get("artifact_path", ""))
+    if artifact_uri.startswith("s3://"):
+        try:
+            artifact = materialize_artifact(artifact_uri, "price_model", str(champion.get("model_version", "legacy")))
+        except ObjectStorageError as error:
+            return None, str(error)
+    else:
+        artifact = Path(artifact_uri)
     root = Path(__file__).resolve().parents[2]
     resolved = (root / artifact).resolve() if not artifact.is_absolute() else artifact.resolve()
     try:
