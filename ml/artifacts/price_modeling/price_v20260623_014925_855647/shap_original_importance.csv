@@ -1,0 +1,16 @@
+feature_name,source_feature,feature_level,importance_value,importance_rank
+neighbourhood,neighbourhood,ORIGINAL,0.3071072665155819,1
+bedrooms,bedrooms,ORIGINAL,0.17745079223066568,2
+accommodates,accommodates,ORIGINAL,0.15060160618468946,3
+room_type,room_type,ORIGINAL,0.08047671611982389,4
+host_response_time,host_response_time,ORIGINAL,0.06623010948970387,5
+property_base_group,property_base_group,ORIGINAL,0.056014438510363446,6
+review_scores_location,review_scores_location,ORIGINAL,0.05599273858712695,7
+number_of_reviews_ltm,number_of_reviews_ltm,ORIGINAL,0.05113707163570507,8
+bathrooms,bathrooms,ORIGINAL,0.050923806678387334,9
+host_total_listings_count,host_total_listings_count,ORIGINAL,0.044245334171835564,10
+calculated_host_listings_count,calculated_host_listings_count,ORIGINAL,0.04347589920059545,11
+minimum_nights,minimum_nights,ORIGINAL,0.04269910786638138,12
+host_listings_count,host_listings_count,ORIGINAL,0.042250609967759374,13
+host_acceptance_rate,host_acceptance_rate,ORIGINAL,0.028663732305346003,14
+host_response_rate,host_response_rate,ORIGINAL,0.01813052666463409,15

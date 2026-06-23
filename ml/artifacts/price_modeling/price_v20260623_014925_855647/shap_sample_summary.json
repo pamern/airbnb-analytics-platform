@@ -1,0 +1,14 @@
+{
+  "run_id": "20260623_014925_855647",
+  "model_name": "price_model",
+  "model_version": "price_v20260623_014925_855647",
+  "sample_size": 1000,
+  "transformed_feature_count": 74,
+  "original_feature_count": 15,
+  "dataset_split": "TEST",
+  "random_state": 42,
+  "explainer_type": "TreeExplainer",
+  "importance_method": "shap",
+  "explanation_output_space": "log_price",
+  "detail_artifact": "ml/artifacts/price_modeling/price_v20260623_014925_855647/shap_sample_values.parquet"
+}
