@@ -139,64 +139,76 @@ def _render_market_signals(result: dict) -> None:
         if note := snapshot.get("revenue_period_note"):
             st.caption(note)
 
-    col_sig, col_watch = st.columns(2)
-    with col_sig:
-        st.markdown("#### Notable Market Signals")
-        for signal in result.get("notable_market_signals", []):
-            _render_signal_card(
-                signal,
-                title_key="signal_title",
-                body_keys=[
-                    ("Related", "related_entities"),
-                    ("Evidence", "evidence_metrics"),
-                    ("Interpretation", "interpretation"),
-                    ("Personal Relevance", "personal_relevance"),
-                    ("What To Watch Next", "what_to_watch_next"),
-                ],
-            )
+    primary_cards = [
+        (
+            signal,
+            "signal_title",
+            [
+                ("Related", "related_entities"),
+                ("Evidence", "evidence_metrics"),
+                ("Interpretation", "interpretation"),
+                ("Personal Relevance", "personal_relevance"),
+                ("What To Watch Next", "what_to_watch_next"),
+            ],
+        )
+        for signal in result.get("notable_market_signals", [])
+    ]
+    primary_cards.extend(
+        (
+            signal,
+            "watchlist_title",
+            [
+                ("Related", "related_entities"),
+                ("Evidence", "evidence_metrics"),
+                ("Why It Matters", "why_it_matters"),
+                ("Not A Final Decision", "not_a_final_decision"),
+            ],
+        )
+        for signal in result.get("watchlist_signals", [])
+    )
 
-    with col_watch:
-        st.markdown("#### Watchlist Signals")
-        for signal in result.get("watchlist_signals", []):
-            _render_signal_card(
-                signal,
-                title_key="watchlist_title",
-                body_keys=[
-                    ("Related", "related_entities"),
-                    ("Evidence", "evidence_metrics"),
-                    ("Why It Matters", "why_it_matters"),
-                    ("Not A Final Decision", "not_a_final_decision"),
-                ],
-            )
+    if primary_cards:
+        st.markdown("#### Market Signals")
+        _render_signal_grid(primary_cards)
 
     st.markdown("---")
-    col_tr, col_an = st.columns(2)
-    with col_tr:
-        st.markdown("#### Segment Trends")
-        for trend in result.get("segment_trends", []):
-            _render_signal_card(
-                trend,
-                title_key="segment_name",
-                body_keys=[
-                    ("Evidence", "evidence_metrics"),
-                    ("Trend Interpretation", "trend_interpretation"),
-                    ("Personal Relevance", "personal_relevance"),
-                ],
-            )
+    secondary_cards = [
+        (
+            trend,
+            "segment_name",
+            [
+                ("Evidence", "evidence_metrics"),
+                ("Trend Interpretation", "trend_interpretation"),
+                ("Personal Relevance", "personal_relevance"),
+            ],
+        )
+        for trend in result.get("segment_trends", [])
+    ]
+    secondary_cards.extend(
+        (
+            anomaly,
+            "anomaly_title",
+            [
+                ("Related Area", "related_area"),
+                ("Evidence", "evidence_metrics"),
+                ("Interpretation", "interpretation"),
+                ("What To Verify Next", "what_to_verify_next"),
+            ],
+        )
+        for anomaly in result.get("pricing_anomalies", [])
+    )
+    if secondary_cards:
+        st.markdown("#### Segment & Pricing Signals")
+        _render_signal_grid(secondary_cards)
 
-    with col_an:
-        st.markdown("#### Pricing Anomalies")
-        for anomaly in result.get("pricing_anomalies", []):
-            _render_signal_card(
-                anomaly,
-                title_key="anomaly_title",
-                body_keys=[
-                    ("Related Area", "related_area"),
-                    ("Evidence", "evidence_metrics"),
-                    ("Interpretation", "interpretation"),
-                    ("What To Verify Next", "what_to_verify_next"),
-                ],
-            )
+
+def _render_signal_grid(cards: list[tuple[object, str, list[tuple[str, str]]]]) -> None:
+    for index in range(0, len(cards), 2):
+        columns = st.columns(2)
+        for column, card in zip(columns, cards[index:index + 2]):
+            item, title_key, body_keys = card
+            with column:
+                _render_signal_card(item, title_key=title_key, body_keys=body_keys)
 
 
 def _render_signal_card(item, title_key: str, body_keys: list[tuple[str, str]]) -> None:
@@ -212,13 +224,29 @@ def _render_signal_card(item, title_key: str, body_keys: list[tuple[str, str]]) 
             if not value:
                 continue
             if isinstance(value, list):
-                clean_values = [str(v) for v in value if v not in (None, "")]
+                clean_values = [_format_evidence_value(v) for v in value if v not in (None, "")]
+                if clean_values:
+                    st.markdown(f"**{label}:**")
+                    for entry in clean_values:
+                        st.markdown(f"- {entry}")
+            elif isinstance(value, dict):
+                clean_values = [
+                    f"{str(metric).replace('_', ' ').title()}: {_format_evidence_value(metric_value)}"
+                    for metric, metric_value in value.items()
+                    if metric_value not in (None, "")
+                ]
                 if clean_values:
                     st.markdown(f"**{label}:**")
                     for entry in clean_values:
                         st.markdown(f"- {entry}")
             else:
-                st.markdown(f"**{label}:** {value}")
+                st.markdown(f"**{label}:** {_format_evidence_value(value)}")
+
+
+def _format_evidence_value(value) -> str:
+    if isinstance(value, (int, float)):
+        return f"Unlabeled metric value: {value:,}"
+    return str(value)
 
 
 def _format_key_drivers(raw_drivers) -> list[str]:

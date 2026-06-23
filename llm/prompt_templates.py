@@ -33,8 +33,8 @@ REQUIRED OUTPUT (JSON):
         "Neighbourhood, room type, or segment names involved in the signal"
       ],
       "evidence_metrics": [
-        "Metric 1 copied or calculated only from the provided context",
-        "Metric 2 copied or calculated only from the provided context"
+        "Metric label: value with unit/context, e.g. Bang Rak listing count: 756 listings",
+        "Metric label: value with unit/context, e.g. Bang Rak median estimated revenue: 12345 THB"
       ],
       "interpretation": "Explain what this signal means for the Bangkok Airbnb market.",
       "personal_relevance": "Explain why a personal user should pay attention to this signal.",
@@ -48,8 +48,8 @@ REQUIRED OUTPUT (JSON):
         "Neighbourhood, room type, or segment names involved"
       ],
       "evidence_metrics": [
-        "Metric 1 from context",
-        "Metric 2 from context"
+        "Metric label: value with unit/context",
+        "Metric label: value with unit/context"
       ],
       "why_it_matters": "Explain why this deserves monitoring.",
       "not_a_final_decision": "Clarify that this is a signal to monitor, not a direct avoid/invest recommendation."
@@ -59,7 +59,7 @@ REQUIRED OUTPUT (JSON):
     {{
       "segment_name": "Aggregate market-segment label from the Gold AI Q&A mart",
       "evidence_metrics": [
-        "Candidate count, covered listing count, share of listings, or other provided segment metrics"
+        "Metric label: value with unit/context, e.g. Segment candidate count: 12 candidates"
       ],
       "trend_interpretation": "Explain what this segment trend suggests about market structure.",
       "personal_relevance": "Explain what a personal user can learn from this segment trend."
@@ -70,7 +70,7 @@ REQUIRED OUTPUT (JSON):
       "anomaly_title": "Clear pricing anomaly title",
       "related_area": "Neighbourhood or area name",
       "evidence_metrics": [
-        "Overpriced listing count or price-related metric from context"
+        "Metric label: value with unit/context, e.g. Watthana overpriced listings: 23 listings"
       ],
       "interpretation": "Explain why this may indicate a pricing anomaly or price trap.",
       "what_to_verify_next": "Explain what should be checked next, such as occupancy or estimated revenue, before drawing a conclusion."
@@ -86,6 +86,9 @@ DATA INTERPRETATION RULES:
 - If an occupancy value is already a string with %, keep it as provided.
 - Do not label revenue as annual or monthly unless the context explicitly says so. Otherwise call it estimated revenue.
 - Do not invent numbers. Only use metrics provided in the JSON context.
+- Every evidence_metrics entry must be a human-readable labeled string. Never output a bare number such as 756, 567, or 154.
+- Include the metric name and unit/context in each evidence metric, such as "listing count", "median nightly price THB", "median occupancy rate", "median estimated revenue THB", "candidate count", or "overpriced listings count".
+- If an evidence metric compares multiple neighbourhoods, write one labeled string per neighbourhood, e.g. "Bang Rak listing count: 756 listings; median estimated revenue: 12345 THB".
 - When describing top or bottom performing areas, name the specific neighbourhoods if they are available in the context.
 - Do not say "top 5 areas" without listing at least some of the area names and metrics.
 - Do not duplicate the same insight across watchlist_signals and pricing_anomalies.
