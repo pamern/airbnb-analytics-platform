@@ -14,7 +14,14 @@ load_dotenv(dotenv_path=ENV_FILE, override=False)
 
 
 def _get_setting(name: str, default: str = "") -> str:
-    """Đọc cấu hình từ biến môi trường hoặc Streamlit Secrets."""
+    """Đọc cấu hình từ biến môi trường hoặc Streamlit Secrets hoặc st.session_state."""
+    try:
+        import streamlit as st
+        if name in st.session_state and st.session_state[name]:
+            return str(st.session_state[name])
+    except Exception:
+        pass
+
     val = getenv(name)
     if val is not None and val.strip() != "":
         return val
@@ -38,7 +45,7 @@ def _get_int(name: str, default: int) -> int:
         return default
 
 
-@dataclass(frozen=True)
+@dataclass
 class AppSettings:
     """Cấu hình chung của project."""
 
@@ -46,7 +53,7 @@ class AppSettings:
     environment: str
 
 
-@dataclass(frozen=True)
+@dataclass
 class MotherDuckSettings:
     """Cấu hình kết nối MotherDuck."""
 
@@ -55,7 +62,7 @@ class MotherDuckSettings:
     schema: str
 
 
-@dataclass(frozen=True)
+@dataclass
 class LLMSettings:
     """Cấu hình dịch vụ LLM."""
 
@@ -68,14 +75,14 @@ class LLMSettings:
     cooldown_seconds: int = 60
 
 
-@dataclass(frozen=True)
+@dataclass
 class StreamlitSettings:
     """Cấu hình Streamlit dashboard."""
 
     server_port: int
 
 
-@dataclass(frozen=True)
+@dataclass
 class ObjectStorageSettings:
     endpoint_url: str
     access_key_id: str
@@ -122,6 +129,37 @@ OBJECT_STORAGE = ObjectStorageSettings(
     region=_get_setting("OBJECT_STORAGE_REGION", "auto"),
     prefix=_get_setting("OBJECT_STORAGE_PREFIX", "airbnb-models").strip("/"),
 )
+
+
+def update_from_session_state() -> None:
+    """Cập nhật lại các biến cấu hình từ session_state của streamlit nếu có."""
+    try:
+        import streamlit as st
+        
+        # Cập nhật MotherDuck
+        for key in ["MOTHERDUCK_TOKEN", "MOTHERDUCK_DATABASE", "MOTHERDUCK_SCHEMA"]:
+            if key in st.session_state and st.session_state[key]:
+                field = key.replace("MOTHERDUCK_", "").lower()
+                setattr(MOTHERDUCK, field, str(st.session_state[key]))
+                
+        # Cập nhật LLM
+        for key in ["GROQ_API_KEY", "LLM_MODEL", "GROQ_API_KEYS"]:
+            if key in st.session_state and st.session_state[key]:
+                if key == "GROQ_API_KEY":
+                    field = "groq_api_key"
+                elif key == "GROQ_API_KEYS":
+                    field = "groq_api_keys"
+                else:
+                    field = "model"
+                setattr(LLM, field, str(st.session_state[key]))
+                
+        # Cập nhật Object Storage
+        for key in ["OBJECT_STORAGE_ENDPOINT_URL", "OBJECT_STORAGE_ACCESS_KEY_ID", "OBJECT_STORAGE_SECRET_ACCESS_KEY", "OBJECT_STORAGE_BUCKET_NAME"]:
+            if key in st.session_state and st.session_state[key]:
+                field = key.replace("OBJECT_STORAGE_", "").lower()
+                setattr(OBJECT_STORAGE, field, str(st.session_state[key]))
+    except Exception:
+        pass
 
 def validate_required_settings(service: ServiceName | None = None) -> list[str]:
     """Kiểm tra các biến bắt buộc trước khi kết nối service thật.

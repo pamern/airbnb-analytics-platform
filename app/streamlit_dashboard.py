@@ -14,6 +14,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 from components.ui import inject_global_styles  # noqa: E402
+from configs.settings import update_from_session_state, validate_required_settings  # noqa: E402
 
 
 st.set_page_config(
@@ -22,6 +23,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Apply settings from session state early in rendering lifecycle
+update_from_session_state()
 
 
 def get_pages() -> list[st.Page]:
@@ -40,6 +44,39 @@ def render_sidebar(pages: list[st.Page]) -> None:
         for page in pages:
             st.page_link(page)
         st.divider()
+
+        # Dynamic configuration in sidebar when credentials are not loaded
+        missing_md = validate_required_settings("motherduck")
+        missing_llm = validate_required_settings("llm")
+
+        if missing_md or missing_llm:
+            st.warning("🔑 Cấu hình Credentials")
+            with st.expander("Nhập API Keys / Tokens", expanded=True):
+                # MotherDuck Token
+                md_token = st.text_input(
+                    "MotherDuck Token",
+                    value=st.session_state.get("MOTHERDUCK_TOKEN", ""),
+                    type="password",
+                    placeholder="md_...",
+                )
+                if md_token:
+                    st.session_state["MOTHERDUCK_TOKEN"] = md_token
+
+                # Groq API Key
+                groq_key = st.text_input(
+                    "Groq API Key",
+                    value=st.session_state.get("GROQ_API_KEY", ""),
+                    type="password",
+                    placeholder="gsk_...",
+                )
+                if groq_key:
+                    st.session_state["GROQ_API_KEY"] = groq_key
+
+                if st.button("Lưu & Áp Dụng", use_container_width=True):
+                    update_from_session_state()
+                    st.success("Đã áp dụng cài đặt!")
+                    st.rerun()
+            st.divider()
 
 
 def main() -> None:
