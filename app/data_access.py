@@ -291,7 +291,7 @@ def _validate_unique_combination_grain(
         )
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_pricing_dataset() -> pd.DataFrame:
     """Load the listing-level dataset used by the pricing dashboard page."""
     connection = connect_motherduck(read_only=False)
@@ -342,7 +342,7 @@ def load_pricing_dataset() -> pd.DataFrame:
     return dataset
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_host_quality_dataset() -> pd.DataFrame:
     """Load the listing-host snapshot dataset used by the host quality page."""
     connection = connect_motherduck(read_only=False)
@@ -381,7 +381,7 @@ def load_host_quality_dataset() -> pd.DataFrame:
     return dataset
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_review_events_dataset() -> pd.DataFrame:
     """Load review-event data for trend and comment-rate analysis."""
     connection = connect_motherduck(read_only=False)
@@ -397,10 +397,10 @@ def load_review_events_dataset() -> pd.DataFrame:
     return dataset
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_overview_dataset() -> pd.DataFrame:
     """Load the listing snapshot dataset used by the market overview page."""
-    connection = connect_motherduck(read_only=True)
+    connection = connect_motherduck(read_only=False)
     try:
         dataset = query_dataframe(connection, OVERVIEW_DATASET_SQL)
     finally:
@@ -443,10 +443,10 @@ def load_overview_dataset() -> pd.DataFrame:
     return dataset
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_forward_availability_monthly_dataset() -> pd.DataFrame:
     """Load forward-looking monthly availability aggregates for the location page."""
-    connection = connect_motherduck(read_only=True)
+    connection = connect_motherduck(read_only=False)
     try:
         dataset = query_dataframe(connection, FORWARD_AVAILABILITY_MONTHLY_DATASET_SQL)
     finally:
@@ -467,10 +467,10 @@ def load_forward_availability_monthly_dataset() -> pd.DataFrame:
     return dataset
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_listing_availability_summary() -> pd.DataFrame:
     """Load listing-level forward availability summaries for the location page."""
-    connection = connect_motherduck(read_only=True)
+    connection = connect_motherduck(read_only=False)
     try:
         dataset = query_dataframe(connection, LISTING_AVAILABILITY_SUMMARY_SQL)
     finally:
@@ -499,10 +499,10 @@ def load_listing_availability_summary() -> pd.DataFrame:
     return dataset
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_listing_availability_monthly_dataset() -> pd.DataFrame:
     """Load listing-by-month forward availability data from Gold facts."""
-    connection = connect_motherduck(read_only=True)
+    connection = connect_motherduck(read_only=False)
     try:
         dataset = query_dataframe(connection, LISTING_AVAILABILITY_MONTHLY_DATASET_SQL)
     finally:
