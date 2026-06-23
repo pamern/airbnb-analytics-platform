@@ -48,6 +48,19 @@ def _styles() -> None:
     </style>""", unsafe_allow_html=True)
 
 
+def _render_metric(col, label: str, value: str) -> None:
+    """Render a metric card that allows line wrapping and uses a uniform font size."""
+    col.markdown(
+        f"""
+        <div style="display: flex; flex-direction: column; justify-content: flex-start; min-height: 80px; margin-bottom: 10px; padding: 2px 0;">
+            <div style="font-size: 0.85rem; color: {T['color_text_muted']}; font-weight: 500; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">{escape(label)}</div>
+            <div style="font-size: 1.5rem; font-weight: 600; color: {T['color_text_primary']}; word-wrap: break-word; word-break: break-all; white-space: normal; line-height: 1.2;">{escape(value)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
 def _layout(fig: go.Figure, height: int = 330) -> go.Figure:
     fig.update_layout(height=height, paper_bgcolor=T["color_surface"], plot_bgcolor=T["color_surface"], font={"family": T["font_family"], "color": T["color_text_primary"]}, margin={"l": 20, "r": 20, "t": 40, "b": 20}, hoverlabel={"bgcolor": T["color_surface"], "font_color": T["color_text_primary"]}, legend={"orientation": "h", "y": 1.12})
     fig.update_xaxes(gridcolor=T["color_border"]); fig.update_yaxes(gridcolor=T["color_border"])
@@ -334,9 +347,9 @@ def _shap_views(version: str | None) -> None:
 def _price_model(filters: dict[str, object]) -> None:
     registry = _registry("price_model", str(filters["stage"])); version = _version(registry, filters["version"]); current = {**filters, "version": version}; champion = _champion(registry)
     metrics, metric_error = get_model_metrics("price_model", version); cols = st.columns(5)
-    cols[0].metric("Active Champion", str(champion["model_version"]) if champion is not None else "No Champion")
-    for col, (key, label) in zip(cols[1:4], PRICE_METRICS.items(), strict=True): col.metric(f"{label} — TEST", _number(_metric(metrics, key, version)))
-    cols[4].metric("Model Version", version or "N/A")
+    _render_metric(cols[0], "Active Champion", str(champion["model_version"]) if champion is not None else "No Champion")
+    for col, (key, label) in zip(cols[1:4], PRICE_METRICS.items(), strict=True): _render_metric(col, f"{label} — TEST", _number(_metric(metrics, key, version)))
+    _render_metric(cols[4], "Model Version", version or "N/A")
     if champion is None: st.warning("No active Price Model Champion is available.")
     _error(metric_error)
     predictions, prediction_error = get_price_evaluation_predictions(version)
@@ -370,9 +383,9 @@ def _pca_projection(frame: pd.DataFrame) -> tuple[pd.DataFrame, tuple[float, flo
 def _segmentation_model(filters: dict[str, object]) -> None:
     registry = _registry("segmentation_model", str(filters["stage"])); version = _version(registry, filters["version"]); current = {**filters, "version": version}; champion = _champion(registry)
     metrics, metric_error = get_model_metrics("segmentation_model", version); profiles, profile_error = get_cluster_profiles(version); cols = st.columns(5)
-    cols[0].metric("Active Champion", str(champion["model_version"]) if champion is not None else "No Champion")
-    for col, (key, label) in zip(cols[1:4], SEGMENTATION_METRICS.items(), strict=True): col.metric(label, _number(_metric(metrics, key, version, test_only=False)))
-    cols[4].metric("Number of Clusters", _number(profiles["cluster_id"].nunique(), 0) if "cluster_id" in profiles else "N/A")
+    _render_metric(cols[0], "Active Champion", str(champion["model_version"]) if champion is not None else "No Champion")
+    for col, (key, label) in zip(cols[1:4], SEGMENTATION_METRICS.items(), strict=True): _render_metric(col, label, _number(_metric(metrics, key, version, test_only=False)))
+    _render_metric(cols[4], "Number of Clusters", _number(profiles["cluster_id"].nunique(), 0) if "cluster_id" in profiles else "N/A")
     if champion is None: st.warning("No active Segmentation Model Champion is available.")
     _error(metric_error); _error(profile_error)
     _section("PCA Cluster Projection", "PCA is used only for two-dimensional visualization. Cluster assignments come from the persisted KMeans model.")
@@ -469,9 +482,12 @@ def _champion_card(champion: pd.Series | None) -> None:
     if champion is None: st.error("No single active Price Model Champion is available. Prediction is disabled."); return
     metrics, error = get_price_model_metrics(str(champion["model_version"]))
     if _error(error): return
-    cols = st.columns(3); cols[0].metric("Model Version", str(champion["model_version"])); cols[1].metric("Stage", str(champion["stage"])); cols[2].metric("Created At", str(champion.get("created_at", "N/A")))
+    cols = st.columns(3)
+    _render_metric(cols[0], "Model Version", str(champion["model_version"]))
+    _render_metric(cols[1], "Stage", str(champion["stage"]))
+    _render_metric(cols[2], "Created At", str(champion.get("created_at", "N/A")))
     metric_cols = st.columns(3)
-    for col, (key, label) in zip(metric_cols, PRICE_METRICS.items(), strict=True): col.metric(label, _number(_metric(metrics, key, str(champion["model_version"]))))
+    for col, (key, label) in zip(metric_cols, PRICE_METRICS.items(), strict=True): _render_metric(col, label, _number(_metric(metrics, key, str(champion["model_version"]))))
 
 
 def _segment_views(predicted_price: float, segment) -> None:

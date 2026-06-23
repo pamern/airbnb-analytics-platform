@@ -47,6 +47,11 @@ class LLMSettings:
 
     groq_api_key: str
     model: str
+    groq_api_keys: str = ""
+    fallback_models: str = ""
+    max_tokens: int = 4096
+    temperature: float = 0.1
+    cooldown_seconds: int = 60
 
 
 @dataclass(frozen=True)
@@ -83,7 +88,13 @@ MOTHERDUCK = MotherDuckSettings(
 LLM = LLMSettings(
     groq_api_key=getenv("GROQ_API_KEY", ""),
     model=getenv("LLM_MODEL", ""),
+    groq_api_keys=getenv("GROQ_API_KEYS", ""),
+    fallback_models=getenv("LLM_FALLBACK_MODELS", "llama-3.3-70b-versatile,mixtral-8x7b-32768,gemma2-9b-it"),
+    max_tokens=_get_int("LLM_MAX_TOKENS", 4096),
+    temperature=float(getenv("LLM_TEMPERATURE", "0.1")),
+    cooldown_seconds=_get_int("LLM_COOLDOWN_SECONDS", 60),
 )
+
 
 STREAMLIT = StreamlitSettings(
     server_port=_get_int("STREAMLIT_SERVER_PORT", 8501),

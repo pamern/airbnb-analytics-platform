@@ -169,7 +169,7 @@ def _validate_unique_combination_grain(
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_pricing_dataset() -> pd.DataFrame:
     """Load the listing-level dataset used by the pricing dashboard page."""
-    connection = duckdb.connect()
+    connection = duckdb.connect(":memory:")
     try:
         dataset = query_dataframe(connection, PRICING_DATASET_SQL)
     finally:
@@ -227,7 +227,7 @@ def load_pricing_dataset() -> pd.DataFrame:
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_host_quality_dataset() -> pd.DataFrame:
     """Load the listing-host snapshot dataset used by the host quality page."""
-    connection = duckdb.connect()
+    connection = duckdb.connect(":memory:")
     try:
         dataset = query_dataframe(connection, HOST_QUALITY_DATASET_SQL)
     finally:
@@ -286,7 +286,7 @@ def load_host_quality_dataset() -> pd.DataFrame:
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_listing_review_recency_dataset() -> pd.DataFrame:
     """Load listing-level review recency data for the host quality page."""
-    connection = duckdb.connect()
+    connection = duckdb.connect(":memory:")
     try:
         dataset = query_dataframe(connection, REVIEW_RECENCY_DATASET_SQL)
     finally:
@@ -307,7 +307,7 @@ def load_listing_review_recency_dataset() -> pd.DataFrame:
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_overview_dataset() -> pd.DataFrame:
     """Load the listing snapshot dataset used by the market overview page."""
-    connection = duckdb.connect()
+    connection = duckdb.connect(":memory:")
     try:
         dataset = query_dataframe(connection, OVERVIEW_DATASET_SQL)
     finally:
@@ -361,7 +361,7 @@ def load_listing_availability_monthly_dataset() -> pd.DataFrame:
             "to sync data from MotherDuck, then refresh the page."
         )
 
-    connection = duckdb.connect()
+    connection = duckdb.connect(":memory:")
     try:
         dataset = query_dataframe(connection, LISTING_AVAILABILITY_MONTHLY_DATASET_SQL)
     finally:
