@@ -39,7 +39,7 @@ class MotherDuckResource(ConfigurableResource):
         token = os.getenv(self.token_env_var)
         if not token:
             raise RuntimeError(f"{self.token_env_var} must be set before a MotherDuck asset can run")
-        return duckdb.connect(f"md:{self.database}?motherduck_token={token}")
+        return duckdb.connect(f"md:{self.database}?motherduck_token={token}", read_only=False)
 
     @contextmanager
     def transaction(self) -> Iterator[Any]:

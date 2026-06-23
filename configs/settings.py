@@ -46,7 +46,12 @@ class LLMSettings:
     """Cấu hình dịch vụ LLM."""
 
     groq_api_key: str
+    groq_api_keys: str
     model: str
+    fallback_models: str
+    max_tokens: int
+    temperature: float
+    cooldown_seconds: int
 
 
 @dataclass(frozen=True)
@@ -82,7 +87,12 @@ MOTHERDUCK = MotherDuckSettings(
 
 LLM = LLMSettings(
     groq_api_key=getenv("GROQ_API_KEY", ""),
-    model=getenv("LLM_MODEL", ""),
+    groq_api_keys=getenv("GROQ_API_KEYS", ""),
+    model=getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
+    fallback_models=getenv("LLM_FALLBACK_MODELS", "llama-3.1-8b-instant"),
+    max_tokens=_get_int("LLM_MAX_TOKENS", 1200),
+    temperature=float(getenv("LLM_TEMPERATURE", "0.2")),
+    cooldown_seconds=_get_int("LLM_KEY_COOLDOWN_SECONDS", 60),
 )
 
 STREAMLIT = StreamlitSettings(
@@ -111,7 +121,7 @@ def validate_required_settings(service: ServiceName | None = None) -> list[str]:
             "MOTHERDUCK_SCHEMA": MOTHERDUCK.schema,
         },
         "llm": {
-            "GROQ_API_KEY": LLM.groq_api_key,
+            "GROQ_API_KEY_OR_KEYS": LLM.groq_api_key or LLM.groq_api_keys,
             "LLM_MODEL": LLM.model,
         },
         "streamlit": {

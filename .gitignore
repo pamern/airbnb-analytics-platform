@@ -19,7 +19,6 @@ wheels/
 data/raw/
 
 # Local service data
-minio_data/
 *.log
 logs/
 
@@ -28,6 +27,9 @@ ml/artifacts/
 ml/outputs/
 *.joblib
 *.pkl
+=========
+*.log
+>>>>>>>>> Temporary merge branch 2
 
 # dbt artifacts and local DuckDB files
 dbt/target/

@@ -26,7 +26,7 @@ from ml.listing_segmentation.config import (  # noqa: E402
 from utils.motherduck import connect_duckdb, connect_motherduck  # noqa: E402
 
 
-def get_connection(read_only: bool = True) -> DuckDBPyConnection:
+def get_connection(read_only: bool = False) -> DuckDBPyConnection:
     """Return a DuckDB or MotherDuck connection based on AIRBNB_DB_TARGET."""
     target = os.getenv("AIRBNB_DB_TARGET", "local").lower()
     if target == "motherduck":

@@ -15,8 +15,8 @@ airbnb-analytics-platform/
 │
 ├── data/
 │   ├── raw/
-│   ├── sample/
-│   └── external/
+│   └── gold_ai_listings_snapshot.csv
+
 │
 ├── ingestion/
 │   ├── load_to_motherduck.py

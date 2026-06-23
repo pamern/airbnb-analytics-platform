@@ -9,10 +9,10 @@ Mục tiêu của project là xây dựng một pipeline phân tích dữ liệu
 - Lưu trữ và phân tích dữ liệu với MotherDuck/DuckDB.
 - Transform dữ liệu bằng dbt theo 3 layer: Bronze, Silver, Gold.
 - Huấn luyện mô hình Machine Learning từ dữ liệu Gold layer.
-- Sử dụng LLM để diễn giải insight và kết quả dự đoán.
+- Sử dụng LLM/Groq để diễn giải insight từ dữ liệu tổng hợp.
 - Xây dựng dashboard bằng Streamlit.
 - Quản lý môi trường Python bằng uv.
-- Chạy local bằng Docker Compose.
+- Chạy local bằng Docker Compose khi cần demo hoặc đóng gói app.
 
 ---
 
@@ -27,13 +27,14 @@ Project sử dụng các công nghệ chính:
 - dbt
 - Streamlit
 - Machine Learning
-- LLM API
+- Groq LLM API
 - GitHub Actions
 
 ---
 
 ## Cấu trúc thư mục chính
-```
+
+```text
 airbnb-analytics-platform/
 ├── docker-compose.yml
 ├── Dockerfile
@@ -56,6 +57,7 @@ airbnb-analytics-platform/
 ├── reports/
 └── docs/
 ```
+
 ---
 
 ## Vai trò các thư mục
@@ -64,11 +66,9 @@ airbnb-analytics-platform/
 
 Chứa dữ liệu local phục vụ phát triển và kiểm thử.
 
-- `raw/`: dữ liệu gốc.
-- `sample/`: dữ liệu mẫu nhỏ để test nhanh.
-- `external/`: dữ liệu bổ sung từ nguồn ngoài nếu có.
+- `raw/`: dữ liệu gốc (không commit lên GitHub nếu quá lớn).
+- `gold_ai_listings_snapshot.csv`: cache dữ liệu Gold layer phục vụ dashboard và LLM local.
 
-Không nên commit dataset quá lớn lên GitHub. Nếu dữ liệu lớn, chỉ commit sample và ghi rõ nguồn dữ liệu trong `README.md`.
 
 ### `ingestion/`
 
@@ -85,11 +85,25 @@ Chứa project dbt và là phần trung tâm của Data Warehouse.
 
 dbt dùng mô hình 3 layer:
 
-Bronze → Silver → Gold
+```text
+Bronze -> Silver -> Gold
+```
 
 - Bronze: giữ dữ liệu raw, không thực hiện chuẩn hoá.
 - Silver: làm sạch dữ liệu, xử lý null, duplicate, chuẩn hóa kiểu dữ liệu và tách entity.
 - Gold: tạo fact, dimension và mart phục vụ dashboard, ML và LLM.
+
+Các Gold model quan trọng hiện gồm:
+
+- `dim_date`
+- `dim_host`
+- `dim_listing`
+- `dim_location`
+- `fact_availability_daily`
+- `fact_listing_current_snapshot`
+- `fact_review`
+- `gold_price_model_features`
+- `gold_cluster_model_features`
 
 ### `ml/`
 
@@ -103,35 +117,59 @@ Vai trò:
 - Generate prediction.
 - Lưu output phục vụ Streamlit dashboard và LLM.
 
-Output ML nên đặt trong `ml/outputs/`.
+Output ML nên đặt trong `ml/outputs/`. Artifact/model lớn không nên commit nếu không cần thiết.
 
 ### `llm/`
 
 Chứa module diễn giải bằng LLM.
 
-Vai trò:
+Vai trò hiện tại:
 
-- Tạo insight từ dữ liệu Gold layer.
-- Giải thích kết quả ML.
-- Sinh báo cáo hoặc đoạn diễn giải phục vụ dashboard.
+- Gọi Groq Chat Completions API trong `llm/groq_insights.py`.
+- Nhận summary markdown từ Gold layer, không gửi raw dataset trực tiếp lên LLM.
+- Sinh 3 insight bằng tiếng Việt cho dashboard AI Q&A.
 
-Output LLM nên đặt trong `llm/outputs/`.
+Luồng Groq hiện tại:
 
-Không đưa API key trực tiếp vào code. Prompt nên được tách rõ trong file riêng nếu cần.
+```text
+Gold tables
+    -> app/data_access.py::load_pricing_insight_context()
+    -> summary markdown
+    -> llm/groq_insights.py::generate_airbnb_insights()
+    -> Streamlit AI Q&A page
+```
+
+Không đưa API key trực tiếp vào code. Các biến cần nằm trong `.env`, ví dụ `GROQ_API_KEY` và `LLM_MODEL`.
 
 ### `app/`
 
 Chứa Streamlit dashboard.
 
-Vai trò:
+Entry point chính:
 
-- Hiển thị KPI tổng quan.
-- Hiển thị phân tích thị trường Airbnb.
-- Hiển thị kết quả ML.
-- Hiển thị insight được tạo bởi LLM.
-- Có thể deploy lên cloud.
+```bash
+uv run streamlit run app/streamlit_dashboard.py
+```
 
-Không nên viết transform phức tạp trong Streamlit. Dashboard nên đọc dữ liệu từ Gold layer, ML outputs hoặc LLM outputs.
+Cấu trúc app hiện tại:
+
+- `app/streamlit_dashboard.py`: cấu hình Streamlit multipage, sidebar, preload cache dữ liệu.
+- `app/pages/01_dashboard.py`: dashboard phân tích chính.
+- `app/pages/02_ai_qa.py`: trang AI Q&A/Groq insight demo.
+- `app/pages/03_model_lab.py`: trang thử nghiệm model/dự báo.
+- `app/components/`: component UI, dashboard section, model lab, AI chat.
+- `app/data_access.py`: lớp đọc dữ liệu cho Streamlit từ Gold layer và summary cho LLM.
+
+Dashboard hiện có các nhóm phân tích chính:
+
+- Executive Overview.
+- Pricing & Listing Performance.
+- Location & Availability Performance.
+- Host & Review Quality.
+- AI Q&A dùng Groq để giải thích insight từ summary Gold pricing data.
+- Model Lab cho phần dự báo/model demo.
+
+Không nên viết transform phức tạp trong Streamlit. Dashboard nên đọc dữ liệu từ Gold layer, ML outputs hoặc LLM outputs. SQL phục vụ dashboard nên được gom vào `app/data_access.py` hoặc đẩy xuống dbt nếu logic trở nên quan trọng/tái sử dụng nhiều.
 
 ### `configs/`
 
@@ -139,10 +177,11 @@ Chứa cấu hình dùng chung.
 
 Ví dụ:
 
-- Đường dẫn project.
-- Biến môi trường.
+- Đường dẫn project trong `configs/paths.py`.
+- Biến môi trường và validate setting trong `configs/settings.py`.
+- Cấu hình logging trong `configs/logging.py`.
 - Thông tin kết nối MotherDuck.
-- Cấu hình logging.
+- Cấu hình LLM/Groq.
 
 Không đặt helper function phức tạp trong `configs/`.
 
@@ -194,6 +233,7 @@ Ví dụ:
 - Dimensional model.
 - ML methodology.
 - LLM interpretation.
+- Orchestration/Dagster notes.
 
 ---
 
@@ -201,19 +241,36 @@ Ví dụ:
 
 Pipeline chính đi theo luồng:
 
+```text
 Raw Airbnb Data
-    ↓
-MotherDuck
-    ↓
-dbt Bronze
-    ↓
-dbt Silver
-    ↓
-dbt Gold
-    ↓
-ML / LLM / Streamlit
+    -> MotherDuck
+    -> dbt Bronze
+    -> dbt Silver
+    -> dbt Gold
+    -> ML / LLM / Streamlit
+```
 
 Streamlit dashboard là nơi hiển thị kết quả cuối và có thể deploy lên cloud.
+
+---
+
+## Luồng dữ liệu cho dashboard và Groq
+
+Dashboard đọc dữ liệu chủ yếu qua `app/data_access.py`:
+
+- `load_pricing_dataset()` đọc listing-level pricing data từ `gold.fact_listing_current_snapshot`, `gold.dim_listing`, `gold.dim_host`, `gold.dim_location`.
+- `load_host_quality_dataset()` đọc dữ liệu host/review quality từ Gold layer.
+- `load_review_events_dataset()` đọc review events từ `gold.fact_review`, `gold.dim_date`, `gold.dim_listing`, `gold.dim_location` và `silver.silver_reviews`.
+- `load_pricing_insight_context()` tạo summary markdown cho Groq từ các query tổng hợp trên Gold layer.
+
+Groq chỉ nhận summary ngắn, gồm:
+
+- Overall pricing snapshot.
+- Top neighbourhoods by median estimated revenue.
+- Room type performance.
+- Reliable review score by room type.
+
+Nguyên tắc: không gửi raw dataset hoặc credential lên LLM.
 
 ---
 
@@ -240,11 +297,13 @@ Streamlit dashboard là nơi hiển thị kết quả cuối và có thể deplo
 
 Ví dụ chạy script:
 
+```bash
 uv run python ingestion/load_to_motherduck.py
 uv run dbt build --project-dir dbt
 uv run python ml/train_model.py
 uv run python llm/insight_generator.py
 uv run streamlit run app/streamlit_dashboard.py
+```
 
 ---
 
@@ -254,8 +313,8 @@ Docker Compose dùng để chạy stack local.
 
 Các service có thể gồm:
 
-- Streamlit app
-- Các service hỗ trợ khác nếu cần
+- Streamlit app.
+- Các service hỗ trợ khác nếu cần.
 
 `Dockerfile` dùng để đóng gói app hoặc runtime cần thiết cho project.
 
@@ -272,9 +331,11 @@ Nguyên tắc:
 - `streamlit_dashboard.py` là entrypoint chính.
 - Các page phụ đặt trong `app/pages/`.
 - Component tái sử dụng đặt trong `app/components/`.
+- Data loading tập trung trong `app/data_access.py`.
 - Dashboard nên đọc dữ liệu từ Gold layer hoặc output ML/LLM.
-- Không viết SQL/transform quá phức tạp trực tiếp trong UI.
+- Không viết SQL/transform quá phức tạp trực tiếp trong UI component.
 - Không hard-code credential trong app.
+- Với dữ liệu nặng, ưu tiên `st.cache_data`, `st.cache_resource` và preload có kiểm soát.
 
 ---
 
@@ -285,11 +346,21 @@ Không commit các thông tin sau:
 - `.env`
 - API key
 - MotherDuck token
-- LLM API key
+- Groq/LLM API key
 - Password
 - Dữ liệu quá lớn nếu không cần thiết
 
 Chỉ commit `.env.example` để mô tả các biến môi trường cần có.
+
+Các biến môi trường thường dùng:
+
+- `MOTHERDUCK_TOKEN`
+- `MOTHERDUCK_DATABASE`
+- `MOTHERDUCK_SCHEMA`
+- `GROQ_API_KEY`
+- `LLM_MODEL`
+- `STREAMLIT_SERVER_PORT`
+- `AIRBNB_CITY`
 
 ---
 
@@ -299,11 +370,15 @@ Commit message nên ngắn gọn, rõ chức năng.
 
 Ví dụ:
 
+```text
 feat: add MotherDuck ingestion script
 feat: create dbt bronze models
 feat: add Streamlit overview dashboard
+feat: add Groq insight generator
+perf: optimize dashboard data loading
 fix: correct MotherDuck connection helper
 docs: update architecture documentation
+```
 
 Không commit:
 
@@ -311,7 +386,7 @@ Không commit:
 - file cache
 - `__pycache__/`
 - file dữ liệu lớn
-- model quá lớn nếu không cần thiết
+- model/artifact quá lớn nếu không cần thiết
 
 ---
 
@@ -330,6 +405,8 @@ Khi chỉnh sửa project này, hãy tuân thủ:
 9. Nếu thêm model dbt quan trọng, bổ sung test hoặc tài liệu liên quan khi phù hợp.
 10. Nếu chưa chắc hướng xử lý, chọn phương án đơn giản, dễ demo trước.
 11. Nếu cần thay đổi cấu trúc để project chạy đúng hơn, có thể đề xuất thay đổi nhưng phải giải thích lý do.
+12. Nếu cập nhật luồng Groq/LLM, đảm bảo tài liệu nói rõ dữ liệu gửi lên LLM là summary từ Gold layer, không phải raw dataset.
+13. Nếu cập nhật dashboard, giữ data access tách khỏi UI component.
 
 ---
 

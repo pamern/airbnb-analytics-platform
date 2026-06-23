@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 
 import streamlit as st
@@ -13,7 +14,18 @@ APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-from components.ui import inject_global_styles  # noqa: E402
+from app.components.ui import inject_global_styles  # noqa: E402
+from app.data_access import (  # noqa: E402
+    load_host_quality_dataset,
+    load_pricing_dataset,
+    load_review_events_dataset,
+)
+
+
+def _preload_data_cache() -> None:
+    """Kick off background threads to warm the data cache before user navigates."""
+    for fn in (load_pricing_dataset, load_host_quality_dataset, load_review_events_dataset):
+        threading.Thread(target=fn, daemon=True).start()
 
 
 st.set_page_config(
@@ -35,7 +47,7 @@ def get_pages() -> list[st.Page]:
 def render_sidebar(pages: list[st.Page]) -> None:
     with st.sidebar:
         st.markdown("### Airbnb Analytics")
-        st.caption("Phân tích thị trường · Dự đoán giá · Trợ lý AI")
+        st.caption("Market analytics · Price prediction · AI assistant")
         st.divider()
         for page in pages:
             st.page_link(page)
@@ -43,6 +55,10 @@ def render_sidebar(pages: list[st.Page]) -> None:
 
 
 def main() -> None:
+    if "data_preloaded" not in st.session_state:
+        st.session_state.data_preloaded = True
+        _preload_data_cache()
+
     inject_global_styles()
     pages = get_pages()
     render_sidebar(pages)
