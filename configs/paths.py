@@ -11,8 +11,7 @@ RAW_DATA_DIR: Path = DATA_DIR / "raw"
 RAW_CITY_NAME: str = "bangkok"
 RAW_CITY_DATA_DIR: Path = RAW_DATA_DIR / RAW_CITY_NAME
 RAW_CITY_OBJECT_PREFIX: str = f"raw/{RAW_CITY_NAME}"
-SAMPLE_DATA_DIR: Path = DATA_DIR / "sample"
-EXTERNAL_DATA_DIR: Path = DATA_DIR / "external"
+
 
 INGESTION_DIR: Path = PROJECT_ROOT / "ingestion"
 DBT_DIR: Path = PROJECT_ROOT / "dbt"

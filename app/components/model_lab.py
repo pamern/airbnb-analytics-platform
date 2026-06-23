@@ -1,26 +1,26 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
 import plotly.express as px
 import streamlit as st
 
-from components.data import (
+from app.components.data import (
     get_feature_selection_summary,
     get_price_model_charts,
     get_price_model_metadata,
     get_selected_features,
 )
-from components.ui import format_number
+from app.components.ui import format_number
 
 
 def _render_model_pipeline() -> None:
     cols = st.columns(4)
     steps = [
-        ("01", "Feature layer", "Đọc feature từ Gold/listing_features."),
-        ("02", "Evaluate", "So sánh HGB, RandomForest và XGBoost."),
-        ("03", "Select", "Chọn model theo RMSE, MAE, R2 và fit time."),
-        ("04", "Serve", "Gắn artifact vào UI để predict và giải thích."),
+        ("01", "Feature layer", "Read features from the Gold/listing feature mart."),
+        ("02", "Evaluate", "Compare HGB, RandomForest, and XGBoost."),
+        ("03", "Select", "Select the model by RMSE, MAE, R2, and fit time."),
+        ("04", "Serve", "Attach the artifact to the UI for prediction and explanation."),
     ]
     for col, (index, title, body) in zip(cols, steps, strict=True):
         with col:
@@ -37,7 +37,7 @@ def _render_price_model_overview() -> None:
 
     st.markdown("### Price prediction")
     if not metadata:
-        st.warning("Chưa tìm thấy metadata cho price model.")
+        st.warning("No price model metadata found.")
         return
 
     best_metrics = metadata.get("best_model_metrics", {})
@@ -49,9 +49,9 @@ def _render_price_model_overview() -> None:
     metric_cols[4].metric("Features", selected_features.get("selected_feature_count", "N/A"))
 
     artifact_ready = metadata.get("model_artifact_saved", False)
-    artifact_label = "✅ Sẵn sàng" if artifact_ready else "⏳ Đang chờ artifact"
+    artifact_label = "Ready" if artifact_ready else "Waiting for artifact"
     st.info(
-        f"**Tóm tắt lần chạy** — "
+        f"**Run summary** - "
         f"Target: `{metadata.get('target', 'N/A')}` | "
         f"Train rows: `{metadata.get('train_rows', 'N/A')}` | "
         f"Test rows: `{metadata.get('test_rows', 'N/A')}` | "
@@ -81,7 +81,7 @@ def _render_price_model_overview() -> None:
         )
         st.plotly_chart(fig, width="stretch")
 
-        with st.expander("Xem bảng đánh giá"):
+        with st.expander("View evaluation table"):
             st.dataframe(
                 summary[
                     [
@@ -109,7 +109,7 @@ def _render_artifact_gallery() -> None:
     with left:
         chart_names = {chart.name: chart for chart in chart_files}
         selected_chart = st.selectbox("Chart", list(chart_names))
-        st.caption("Đọc từ ml/outputs/price_modeling/charts.")
+        st.caption("Loaded from ml/outputs/price_modeling/charts.")
     with right:
         st.image(str(chart_names[selected_chart]), width="stretch")
 
@@ -151,7 +151,7 @@ def _collect_prediction_payload() -> dict[str, Any]:
             host_acceptance_rate = st.slider("Host acceptance rate", 0, 100, 90)
             host_response_rate = st.slider("Host response rate", 0, 100, 90)
 
-        submitted = st.form_submit_button("Chạy prediction", width="stretch")
+        submitted = st.form_submit_button("Run prediction", width="stretch")
 
     payload = {
         "neighbourhood": neighbourhood,
@@ -179,16 +179,16 @@ def _render_prediction_runner() -> None:
     st.markdown("### Run price model")
     if not metadata.get("model_artifact_saved", False):
         st.info(
-            "Notebook hiện chưa lưu model artifact. Form này đã sẵn sàng để gắn inference "
-            "khi có file model trong ml/outputs/price_modeling/models."
+            "The notebook has not saved a model artifact yet. This form is ready "
+            "to connect to inference once a model file exists in ml/outputs/price_modeling/models."
         )
 
     payload = _collect_prediction_payload()
     if payload:
-        st.warning("Chưa có model artifact để predict thật. Đây là payload UI đã tạo.")
+        st.warning("No model artifact is available for real prediction yet. This is the UI payload.")
         st.json(payload)
 
-    with st.expander("Selected features từ notebook"):
+    with st.expander("Selected features from the notebook"):
         st.write(selected_features.get("selected_features", []))
 
 
@@ -196,8 +196,8 @@ def _render_cluster_workspace() -> None:
     left, right = st.columns([1.25, 1])
     with left:
         st.info(
-            "**Cluster workspace** — Chỗ cho KMeans/DBSCAN/segmentation. "
-            "Sẽ hiển thị scatter/map, số cụm, silhouette score và mô tả từng segment."
+            "**Cluster workspace** - Space for KMeans/DBSCAN/segmentation. "
+            "This will show a scatter/map view, cluster count, silhouette score, and segment descriptions."
         )
     with right:
         metric_cols = st.columns(2)
@@ -208,8 +208,8 @@ def _render_cluster_workspace() -> None:
 
 def _render_future_model_workspace() -> None:
     st.info(
-        "**Workspace cho model tiếp theo** — Form input, bảng evaluation, "
-        "chart output hoặc phần giải thích bằng AI."
+        "**Next model workspace** - Input form, evaluation table, "
+        "chart output, or AI-generated explanation."
     )
 
 
@@ -218,7 +218,7 @@ def render_model_lab_page() -> None:
     st.divider()
 
     overview_tab, run_tab, cluster_tab, future_tab = st.tabs(
-        ["Tổng quan", "Chạy dự báo", "Cluster", "Model 3"]
+        ["Overview", "Run prediction", "Cluster", "Model 3"]
     )
     with overview_tab:
         _render_price_model_overview()

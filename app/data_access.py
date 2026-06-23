@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
@@ -24,63 +23,8 @@ def _get_connection():
     return connect_motherduck(read_only=True)
 
 
-PRICING_DATASET_SQL = """
-select
-    listing_dim.listing_id,
-    listing_dim.listing_name,
-    coalesce(location_dim.neighbourhood, 'UNKNOWN') as neighbourhood,
-    coalesce(listing_dim.room_type, 'UNKNOWN') as room_type,
-    coalesce(listing_dim.property_type, 'UNKNOWN') as property_type,
-    listing_dim.accommodates,
-    fact.listing_snapshot_price as price,
-    fact.estimated_occupancy_l365d,
-    fact.estimated_revenue_l365d,
-    fact.review_scores_rating,
-    fact.number_of_reviews,
-    fact.number_of_reviews_l30d,
-    fact.number_of_reviews_ly,
-    host_dim.host_name
-from gold.fact_listing_current_snapshot as fact
-inner join gold.dim_listing as listing_dim
-    on fact.listing_key = listing_dim.listing_key
-left join gold.dim_host as host_dim
-    on fact.host_key = host_dim.host_key
-left join gold.dim_location as location_dim
-    on fact.location_key = location_dim.location_key
-where fact.listing_snapshot_price is not null
-"""
-
-HOST_QUALITY_DATASET_SQL = """
-select
-    fact.listing_id,
-    listing_dim.listing_name,
-    coalesce(location_dim.neighbourhood, 'UNKNOWN') as neighbourhood,
-    coalesce(listing_dim.room_type, 'UNKNOWN') as room_type,
-    host_dim.host_id,
-    host_dim.host_name,
-    host_dim.host_response_rate,
-    host_dim.host_acceptance_rate,
-    host_dim.host_is_superhost,
-    host_dim.host_identity_verified,
-    host_dim.host_listings_count,
-    host_dim.host_total_listings_count,
-    fact.listing_snapshot_price as price,
-    fact.number_of_reviews,
-    fact.review_scores_rating,
-    fact.review_scores_accuracy,
-    fact.review_scores_cleanliness,
-    fact.review_scores_checkin,
-    fact.review_scores_communication,
-    fact.review_scores_location,
-    fact.review_scores_value,
-    fact.availability_30
-from gold.fact_listing_current_snapshot as fact
-inner join gold.dim_listing as listing_dim
-    on fact.listing_key = listing_dim.listing_key
-inner join gold.dim_host as host_dim
-    on fact.host_key = host_dim.host_key
-left join gold.dim_location as location_dim
-    on fact.location_key = location_dim.location_key
+LISTINGS_SNAPSHOT_SQL = """
+select * from gold.gold_ai_listings_snapshot
 """
 
 REVIEW_EVENTS_DATASET_SQL = """
@@ -105,9 +49,14 @@ left join silver.silver_reviews as silver_review
 
 @st.cache_data(ttl=900, show_spinner=False)
 def load_pricing_dataset() -> pd.DataFrame:
-    """Load the listing-level dataset used by the pricing dashboard page."""
-    dataset = query_dataframe(_get_connection(), PRICING_DATASET_SQL)
+    """Load the listing-level dataset from Gold layer for the pricing dashboard."""
+    conn = _get_connection()
+    try:
+        conn.execute("SET http_timeout = 120000;")
+    except Exception:
+        pass
 
+    dataset = query_dataframe(conn, LISTINGS_SNAPSHOT_SQL)
     dataset = dataset.drop_duplicates(subset=["listing_id"]).copy()
     dataset["listing_name"] = dataset["listing_name"].fillna("Unnamed listing")
     dataset["neighbourhood"] = dataset["neighbourhood"].fillna("UNKNOWN")
@@ -143,128 +92,20 @@ def load_pricing_dataset() -> pd.DataFrame:
 
     valid_capacity = dataset["accommodates"].where(dataset["accommodates"] > 0)
     dataset["price_per_person"] = dataset["price"] / valid_capacity
+
     return dataset
-
-
-_INSIGHT_QUERIES = {
-    "overall": """
-        select
-            count(*) filter (where fact.listing_snapshot_price > 0) as positive_price_listings,
-            median(fact.listing_snapshot_price) filter (where fact.listing_snapshot_price > 0) as median_price,
-            median(fact.estimated_occupancy_l365d / 365.0)
-                filter (where fact.listing_snapshot_price > 0) as median_occupancy_rate,
-            median(fact.estimated_revenue_l365d)
-                filter (where fact.listing_snapshot_price > 0) as median_revenue
-        from gold.fact_listing_current_snapshot as fact
-    """,
-    "top_neighbourhoods": """
-        select
-            coalesce(location_dim.neighbourhood, 'UNKNOWN') as neighbourhood,
-            count(*) as listings,
-            median(fact.listing_snapshot_price) as median_price,
-            median(fact.estimated_occupancy_l365d / 365.0) as median_occupancy_rate,
-            median(fact.estimated_revenue_l365d) as median_revenue
-        from gold.fact_listing_current_snapshot as fact
-        left join gold.dim_location as location_dim
-            on fact.location_key = location_dim.location_key
-        where fact.listing_snapshot_price > 0
-        group by 1
-        having count(*) >= 50
-        order by median_revenue desc
-        limit 5
-    """,
-    "room_type_summary": """
-        select
-            coalesce(listing_dim.room_type, 'UNKNOWN') as room_type,
-            count(*) as listings,
-            median(fact.listing_snapshot_price) as median_price,
-            median(fact.estimated_occupancy_l365d / 365.0) as median_occupancy_rate,
-            median(fact.estimated_revenue_l365d) as median_revenue
-        from gold.fact_listing_current_snapshot as fact
-        inner join gold.dim_listing as listing_dim
-            on fact.listing_key = listing_dim.listing_key
-        where fact.listing_snapshot_price > 0
-        group by 1
-        order by median_revenue desc
-    """,
-    "review_summary": """
-        select
-            coalesce(listing_dim.room_type, 'UNKNOWN') as room_type,
-            count(*) as reliable_listings,
-            median(fact.review_scores_rating) as median_review_score
-        from gold.fact_listing_current_snapshot as fact
-        inner join gold.dim_listing as listing_dim
-            on fact.listing_key = listing_dim.listing_key
-        where fact.review_scores_rating is not null
-            and fact.number_of_reviews >= 5
-        group by 1
-        order by median_review_score desc
-    """,
-}
-
-
-def _run_insight_query(key: str, sql: str) -> tuple[str, pd.DataFrame]:
-    conn = connect_motherduck(read_only=True)
-    try:
-        return key, query_dataframe(conn, sql)
-    finally:
-        conn.close()
-
-
-@st.cache_data(ttl=900, show_spinner=False)
-def load_pricing_insight_context() -> str:
-    """Build a compact text summary for the LLM insight generator."""
-    results: dict[str, pd.DataFrame] = {}
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {executor.submit(_run_insight_query, k, v): k for k, v in _INSIGHT_QUERIES.items()}
-        for future in as_completed(futures):
-            key, df = future.result()
-            results[key] = df
-
-    overall = results["overall"]
-    top_neighbourhoods = results["top_neighbourhoods"]
-    room_type_summary = results["room_type_summary"]
-    review_summary = results["review_summary"]
-
-    def table_to_markdown(frame: pd.DataFrame) -> str:
-        if frame.empty:
-            return "No rows available."
-        rounded = frame.copy()
-        for column in rounded.select_dtypes(include=["float"]).columns:
-            rounded[column] = rounded[column].round(2)
-        return rounded.to_markdown(index=False)
-
-    return "\n\n".join(
-        [
-            "## Overall pricing snapshot",
-            f"- Listings with positive price: {overall.at[0, 'positive_price_listings']:,.0f}",
-            f"- Median listed price: {overall.at[0, 'median_price']:,.0f} THB",
-            (
-                "- Median estimated occupancy rate L365D: "
-                f"{overall.at[0, 'median_occupancy_rate']:.2%}"
-            ),
-            (
-                "- Median estimated revenue L365D: "
-                f"{overall.at[0, 'median_revenue']:,.0f} THB"
-            ),
-            "",
-            "## Top neighbourhoods by median estimated revenue",
-            table_to_markdown(top_neighbourhoods),
-            "",
-            "## Room type performance",
-            table_to_markdown(room_type_summary),
-            "",
-            "## Reliable review score by room type",
-            table_to_markdown(review_summary),
-        ]
-    )
 
 
 @st.cache_data(ttl=900, show_spinner=False)
 def load_host_quality_dataset() -> pd.DataFrame:
-    """Load the listing-host snapshot dataset used by the host quality page."""
-    dataset = query_dataframe(_get_connection(), HOST_QUALITY_DATASET_SQL)
+    """Load the listing-host snapshot from Gold layer for the host quality page."""
+    conn = _get_connection()
+    try:
+        conn.execute("SET http_timeout = 120000;")
+    except Exception:
+        pass
 
+    dataset = query_dataframe(conn, LISTINGS_SNAPSHOT_SQL)
     dataset["listing_name"] = dataset["listing_name"].fillna("Unnamed listing")
     dataset["neighbourhood"] = dataset["neighbourhood"].fillna("UNKNOWN")
     dataset["room_type"] = dataset["room_type"].fillna("UNKNOWN")
@@ -290,14 +131,20 @@ def load_host_quality_dataset() -> pd.DataFrame:
     boolean_columns = ["host_is_superhost", "host_identity_verified"]
     for column in boolean_columns:
         dataset[column] = dataset[column].fillna(False).astype(bool)
+
     return dataset
 
 
 @st.cache_data(ttl=900, show_spinner=False)
 def load_review_events_dataset() -> pd.DataFrame:
-    """Load review-event data for trend and comment-rate analysis."""
-    dataset = query_dataframe(_get_connection(), REVIEW_EVENTS_DATASET_SQL)
+    """Load review-event data from Gold layer for trend and comment-rate analysis."""
+    conn = _get_connection()
+    try:
+        conn.execute("SET http_timeout = 120000;")
+    except Exception:
+        pass
 
+    dataset = query_dataframe(conn, REVIEW_EVENTS_DATASET_SQL)
     dataset["neighbourhood"] = dataset["neighbourhood"].fillna("UNKNOWN")
     dataset["room_type"] = dataset["room_type"].fillna("UNKNOWN")
     dataset["review_date"] = pd.to_datetime(dataset["review_date"], errors="coerce")

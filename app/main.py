@@ -14,8 +14,8 @@ APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-from components.ui import inject_global_styles  # noqa: E402
-from data_access import (  # noqa: E402
+from app.components.ui import inject_global_styles  # noqa: E402
+from app.data_access import (  # noqa: E402
     load_host_quality_dataset,
     load_pricing_dataset,
     load_review_events_dataset,
@@ -47,7 +47,7 @@ def get_pages() -> list[st.Page]:
 def render_sidebar(pages: list[st.Page]) -> None:
     with st.sidebar:
         st.markdown("### Airbnb Analytics")
-        st.caption("Phân tích thị trường · Dự đoán giá · Trợ lý AI")
+        st.caption("Market analytics · Price prediction · AI assistant")
         st.divider()
         for page in pages:
             st.page_link(page)

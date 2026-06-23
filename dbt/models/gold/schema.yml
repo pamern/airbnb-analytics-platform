@@ -457,3 +457,78 @@ models:
         description: Natural-log transformed listing price, calculated as ln(1 + price), used as the prediction target.
         tests:
           - not_null
+
+
+  - name: gold_ai_qa_investment_recommendations
+    description: Gold AI mart for investment recommendations, evaluating Airbnb market-entry opportunities by neighbourhood and room type. It calculates opportunity score, risk score, action tier, confidence level, and risk flags from aggregate Gold data only. It must not be interpreted as actual ROI or guaranteed profitability because operating cost and booking transaction data are not available.
+    tests:
+      - not_empty
+    columns:
+      - name: neighbourhood
+        description: Airbnb neighbourhood being evaluated.
+        tests:
+          - not_null
+      - name: recommended_room_type
+        description: Room type candidate for the investment opportunity.
+        tests:
+          - not_null
+      - name: listing_count
+        description: Number of positive-price listings in the neighbourhood. Used for both confidence and competition risk.
+        tests:
+          - not_null
+          - non_negative
+      - name: room_type_listing_count
+        description: Number of positive-price listings for the recommended neighbourhood and room type.
+        tests:
+          - not_null
+          - non_negative
+      - name: opportunity_score
+        description: Score from 0 to 100 based on estimated revenue, estimated occupancy, competition zone, and room-type confidence.
+        tests:
+          - not_null
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: risk_score
+        description: Score from 0 to 100 based on low sample size, saturation, low demand, price trap, and room-type confidence risk.
+        tests:
+          - not_null
+          - between_or_null:
+              arguments:
+                min_value: 0
+                max_value: 100
+      - name: opportunity_level
+        description: Bucketing of opportunity_score into High, Medium, or Low.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['High', 'Medium', 'Low']
+      - name: risk_level
+        description: Bucketing of risk_score into High, Medium, or Low.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['High', 'Medium', 'Low']
+      - name: action_tier
+        description: Final investment action bucket for the LLM and dashboard.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - Strong Invest
+                  - Investigate Further
+                  - Stable but Low Priority
+                  - Avoid
+      - name: confidence_level
+        description: Data confidence level based on neighbourhood and room-type sample size plus risk score.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['High', 'Medium', 'Low']
+      - name: risk_flags
+        description: Semicolon-separated risk labels used as evidence for LLM recommendations.

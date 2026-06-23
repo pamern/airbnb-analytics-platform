@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from app.data_access import load_host_quality_dataset, load_review_events_dataset
-from components.ui import render_metric_grid, two_column_layout
+from app.components.ui import render_metric_grid, two_column_layout
 
 
 def _format_pct(value: float | int | None) -> str:

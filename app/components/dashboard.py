@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.executive_overview import render_executive_overview
-from components.host_review_quality import render_host_review_quality
-from components.location_availability_performance import (
+from app.components.executive_overview import render_executive_overview
+from app.components.host_review_quality import render_host_review_quality
+from app.components.location_availability_performance import (
     render_location_availability_performance,
 )
-from components.pricing_listing_performance import (
+from app.components.pricing_listing_performance import (
     render_pricing_listing_performance,
 )
-from components.ui import render_section_intro
+from app.components.ui import render_section_intro
 
 
 def render_dashboard_page() -> None:
@@ -41,13 +41,13 @@ def render_dashboard_page() -> None:
     )
 
     _SPINNER_MESSAGES = {
-        "Executive Overview": "Đang tải dữ liệu tổng quan...",
-        "Pricing & Listing Performance": "Đang tải dữ liệu pricing...",
-        "Location & Availability Performance": "Đang tải dữ liệu location...",
-        "Host & Review Quality": "Đang tải dữ liệu host & review...",
+        "Executive Overview": "Loading executive overview data...",
+        "Pricing & Listing Performance": "Loading pricing data...",
+        "Location & Availability Performance": "Loading location data...",
+        "Host & Review Quality": "Loading host and review data...",
     }
 
-    with st.spinner(_SPINNER_MESSAGES.get(selected_section, "Đang tải dữ liệu...")):
+    with st.spinner(_SPINNER_MESSAGES.get(selected_section, "Loading data...")):
         if selected_section == "Executive Overview":
             render_executive_overview()
         elif selected_section == "Pricing & Listing Performance":
