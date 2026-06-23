@@ -13,10 +13,24 @@ from configs.paths import ENV_FILE
 load_dotenv(dotenv_path=ENV_FILE, override=False)
 
 
+def _get_setting(name: str, default: str = "") -> str:
+    """Đọc cấu hình từ biến môi trường hoặc Streamlit Secrets."""
+    val = getenv(name)
+    if val is not None and val.strip() != "":
+        return val
+    try:
+        import streamlit as st
+        if name in st.secrets:
+            return str(st.secrets[name])
+    except Exception:
+        pass
+    return default
+
+
 def _get_int(name: str, default: int) -> int:
-    """Đọc biến integer từ môi trường, nếu sai định dạng thì dùng default."""
-    value = getenv(name)
-    if value is None or value.strip() == "":
+    """Đọc biến integer từ cấu hình, nếu sai định dạng thì dùng default."""
+    value = _get_setting(name)
+    if value == "":
         return default
     try:
         return int(value)
@@ -75,23 +89,23 @@ ServiceName = Literal["motherduck", "llm", "streamlit"]
 
 
 APP = AppSettings(
-    project_name=getenv("PROJECT_NAME", "airbnb-analytics-platform"),
-    environment=getenv("ENVIRONMENT", "development"),
+    project_name=_get_setting("PROJECT_NAME", "airbnb-analytics-platform"),
+    environment=_get_setting("ENVIRONMENT", "development"),
 )
 
 MOTHERDUCK = MotherDuckSettings(
-    token=getenv("MOTHERDUCK_TOKEN", ""),
-    database=getenv("MOTHERDUCK_DATABASE", "airbnb_analytics"),
-    schema=getenv("MOTHERDUCK_SCHEMA", "bronze"),
+    token=_get_setting("MOTHERDUCK_TOKEN", ""),
+    database=_get_setting("MOTHERDUCK_DATABASE", "airbnb_analytics"),
+    schema=_get_setting("MOTHERDUCK_SCHEMA", "bronze"),
 )
 
 LLM = LLMSettings(
-    groq_api_key=getenv("GROQ_API_KEY", ""),
-    model=getenv("LLM_MODEL", ""),
-    groq_api_keys=getenv("GROQ_API_KEYS", ""),
-    fallback_models=getenv("LLM_FALLBACK_MODELS", "llama-3.3-70b-versatile,mixtral-8x7b-32768,gemma2-9b-it"),
+    groq_api_key=_get_setting("GROQ_API_KEY", ""),
+    model=_get_setting("LLM_MODEL", ""),
+    groq_api_keys=_get_setting("GROQ_API_KEYS", ""),
+    fallback_models=_get_setting("LLM_FALLBACK_MODELS", "llama-3.3-70b-versatile,mixtral-8x7b-32768,gemma2-9b-it"),
     max_tokens=_get_int("LLM_MAX_TOKENS", 4096),
-    temperature=float(getenv("LLM_TEMPERATURE", "0.1")),
+    temperature=float(_get_setting("LLM_TEMPERATURE", "0.1") or "0.1"),
     cooldown_seconds=_get_int("LLM_COOLDOWN_SECONDS", 60),
 )
 
@@ -101,12 +115,12 @@ STREAMLIT = StreamlitSettings(
 )
 
 OBJECT_STORAGE = ObjectStorageSettings(
-    endpoint_url=getenv("OBJECT_STORAGE_ENDPOINT_URL", getenv("R2_ENDPOINT_URL", "")),
-    access_key_id=getenv("OBJECT_STORAGE_ACCESS_KEY_ID", getenv("R2_ACCESS_KEY_ID", "")),
-    secret_access_key=getenv("OBJECT_STORAGE_SECRET_ACCESS_KEY", getenv("R2_SECRET_ACCESS_KEY", "")),
-    bucket_name=getenv("OBJECT_STORAGE_BUCKET_NAME", getenv("R2_BUCKET_NAME", "")),
-    region=getenv("OBJECT_STORAGE_REGION", "auto"),
-    prefix=getenv("OBJECT_STORAGE_PREFIX", "airbnb-models").strip("/"),
+    endpoint_url=_get_setting("OBJECT_STORAGE_ENDPOINT_URL", _get_setting("R2_ENDPOINT_URL", "")),
+    access_key_id=_get_setting("OBJECT_STORAGE_ACCESS_KEY_ID", _get_setting("R2_ACCESS_KEY_ID", "")),
+    secret_access_key=_get_setting("OBJECT_STORAGE_SECRET_ACCESS_KEY", _get_setting("R2_SECRET_ACCESS_KEY", "")),
+    bucket_name=_get_setting("OBJECT_STORAGE_BUCKET_NAME", _get_setting("R2_BUCKET_NAME", "")),
+    region=_get_setting("OBJECT_STORAGE_REGION", "auto"),
+    prefix=_get_setting("OBJECT_STORAGE_PREFIX", "airbnb-models").strip("/"),
 )
 
 def validate_required_settings(service: ServiceName | None = None) -> list[str]:
