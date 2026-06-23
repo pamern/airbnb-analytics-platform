@@ -16,8 +16,6 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from components.data import get_price_model_metadata, get_selected_features
-from data_access import load_pricing_dataset
 from services.model_performance_service import (
     get_cluster_assignments, get_cluster_pca_data, get_cluster_profiles,
     get_feature_importance, get_metric_trend, get_model_metrics,
@@ -26,7 +24,8 @@ from services.model_performance_service import (
 )
 from services.price_prediction_service import (
     get_active_price_champion, get_comparable_listings, get_price_candidates,
-    get_price_model_metrics, predict_single_listing, set_price_champion,
+    get_price_input_features, get_price_input_options, get_price_model_metrics,
+    predict_single_listing, set_price_champion, PRICE_INPUT_SCHEMA,
 )
 from styles.design_tokens import DESIGN_TOKENS as T
 
@@ -198,14 +197,22 @@ def _error_by_band(predictions: pd.DataFrame) -> None:
 
 
 def _metric_trend(filters: dict[str, object]) -> None:
-    _section("Metric Trend", "TEST metrics from successful Price Model runs.")
+    _section("Metric Trend", "Metrics from successful runs, displayed at each run timestamp.")
     trend, error = get_metric_trend("price_model", filters["date_from"], filters["date_to"])
     if _error(error) or trend.empty: return
-    trend = trend[trend["dataset_split"].astype(str).str.upper().eq("TEST")]
-    if trend.empty: st.info("No successful TEST runs match the selected date range."); return
-    selected = st.multiselect("Metrics", list(PRICE_METRICS.values()), default=list(PRICE_METRICS.values()), key="price_metric_trend")
-    keys = [key for key, label in PRICE_METRICS.items() if label in selected]; trend = trend[trend["metric_name"].astype(str).str.lower().isin(keys)]
-    if not trend.empty: st.plotly_chart(_layout(px.line(trend, x="started_at", y="metric_value", color="metric_name", markers=True, color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"]])), use_container_width=True)
+    metric_names = sorted(trend["metric_name"].dropna().astype(str).unique().tolist())
+    splits = sorted(trend["dataset_split"].fillna("UNSPECIFIED").astype(str).unique().tolist())
+    controls = st.columns(2)
+    selected_metrics = controls[0].multiselect("Metrics", metric_names, default=metric_names, key="price_metric_trend")
+    selected_splits = controls[1].multiselect("Dataset Splits", splits, default=splits, key="price_metric_trend_splits")
+    visible = trend[
+        trend["metric_name"].astype(str).isin(selected_metrics)
+        & trend["dataset_split"].fillna("UNSPECIFIED").astype(str).isin(selected_splits)
+    ]
+    if visible.empty: st.info("No successful runs match the selected metric and dataset split."); return
+    visible = visible.assign(series=lambda frame: frame["metric_name"].astype(str) + " · " + frame["dataset_split"].fillna("UNSPECIFIED").astype(str))
+    fig = px.line(visible, x="started_at", y="metric_value", color="series", symbol="model_version", markers=True, hover_data=["model_version", "dataset_split", "started_at"], color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"], T["chart_danger"]])
+    st.plotly_chart(_layout(fig), use_container_width=True)
 
 
 def _normalise_shap(frame: pd.DataFrame, allowed: list[str]) -> pd.DataFrame:
@@ -258,7 +265,7 @@ def _price_model(filters: dict[str, object]) -> None:
     if not _error(prediction_error):
         if predictions.empty: st.info("No evaluation predictions are available for this model version.")
         else: _price_scatter_and_residual(predictions, version); _error_by_band(predictions)
-    _metric_trend(current); _shap_views(version); _tables("price_model", registry, current)
+    _shap_views(version); _metric_trend(current); _tables("price_model", registry, current)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -307,9 +314,11 @@ def _segmentation_model(filters: dict[str, object]) -> None:
     with right:
         _section("Segmentation Metric Trend", "Metrics from successful segmentation runs.")
         if not _error(trend_error) and not trend.empty:
-            trend = trend[trend["metric_name"].astype(str).str.lower().isin(SEGMENTATION_METRICS)]
-            if trend.empty: st.info("No successful runs are available for the selected date range.")
-            else: st.plotly_chart(_layout(px.line(trend, x="started_at", y="metric_value", color="metric_name", markers=True, color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"]])), use_container_width=True)
+            metric_names = sorted(trend["metric_name"].dropna().astype(str).unique().tolist())
+            selected_metrics = st.multiselect("Segmentation Metrics", metric_names, default=metric_names, key="segmentation_metric_trend")
+            visible = trend[trend["metric_name"].astype(str).isin(selected_metrics)]
+            if visible.empty: st.info("No successful runs match the selected metrics.")
+            else: st.plotly_chart(_layout(px.line(visible, x="started_at", y="metric_value", color="metric_name", symbol="model_version", markers=True, hover_data=["model_version", "dataset_split", "started_at"], color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"]])), use_container_width=True)
     _section("Cluster Profiles", "Available profile fields are read directly from the Gold table.")
     if not _error(profile_error): st.dataframe(profiles, use_container_width=True, hide_index=True) if not profiles.empty else st.info("No cluster profiles are available for this model version.")
     _tables("segmentation_model", registry, current)
@@ -321,71 +330,43 @@ def _performance() -> None:
     else: _segmentation_model(filters)
 
 
-def _prediction_options() -> dict[str, list[str]]:
-    """Reuse the dashboard's cached market dataset for categorical selector values."""
-    try:
-        dataset = load_pricing_dataset()
-    except Exception:
-        dataset = pd.DataFrame()
-    def values(column: str) -> list[str]:
-        if column not in dataset: return ["No options available"]
-        options = sorted(dataset[column].dropna().astype(str).loc[lambda series: series.str.strip().ne("")].unique().tolist())
-        return options or ["No options available"]
-    return {
-        "neighbourhood": values("neighbourhood"),
-        "room_type": values("room_type"),
-        "property_base_group": values("property_type"),
-        # This is the existing canonical response-time taxonomy already used by Model Lab.
-        "host_response_time": ["within an hour", "within a few hours", "within a day", "a few days or more"],
-    }
-
-
-def _prediction_inputs(selected: set[str]) -> tuple[dict[str, object], bool, bool]:
-    """Render only fields used by the persisted price-model feature schema."""
+def _prediction_inputs(features: list[str]) -> tuple[dict[str, object], bool, bool]:
+    """Render the active Champion's raw feature schema in three balanced columns."""
+    options, options_error = get_price_input_options(features)
+    if options_error:
+        st.info("Current categorical values could not be loaded from the feature table.")
     with st.form("price_prediction_form", clear_on_submit=True):
-        st.markdown("#### Listing Inputs")
+        st.markdown("#### Input Information")
+        st.caption("Only raw fields required by the active Price Model Champion are shown.")
         values: dict[str, object] = {}
-        options = _prediction_options()
-        def show(name: str) -> bool: return name in selected
-        if any(show(v) for v in ("neighbourhood", "room_type", "property_base_group")):
-            st.caption("Location"); cols = st.columns(3)
-            if show("neighbourhood"): values["neighbourhood"] = cols[0].selectbox("Neighbourhood", options["neighbourhood"])
-            if show("room_type"): values["room_type"] = cols[1].selectbox("Room Type", options["room_type"])
-            if show("property_base_group"): values["property_base_group"] = cols[2].selectbox("Property Group", options["property_base_group"])
-        capacity = ["accommodates", "bedrooms", "bathrooms", "beds"]
-        if any(show(v) for v in capacity):
-            st.caption("Capacity & Space"); cols = st.columns(4)
-            for col, name in zip(cols, capacity, strict=True):
-                if show(name): values[name] = col.number_input(name.replace("_", " ").title(), min_value=0.0 if name == "bathrooms" else 0, value=1.0 if name == "bathrooms" else 1)
-        booking = ["minimum_nights", "maximum_nights", "instant_bookable"]
-        if any(show(v) for v in booking):
-            st.caption("Booking Rules"); cols = st.columns(3)
-            if show("minimum_nights"): values["minimum_nights"] = cols[0].number_input("Minimum Nights", min_value=1, value=1)
-            if show("maximum_nights"): values["maximum_nights"] = cols[1].number_input("Maximum Nights", min_value=1, value=365)
-            if show("instant_bookable"): values["instant_bookable"] = cols[2].toggle("Instant Bookable", value=False)
-        host = ["host_response_time", "host_response_rate", "host_acceptance_rate", "host_listings_count", "host_total_listings_count", "calculated_host_listings_count"]
-        if any(show(v) for v in host):
-            st.caption("Host Information"); cols = st.columns(3)
-            if show("host_response_time"): values["host_response_time"] = cols[0].selectbox("Host Response Time", options["host_response_time"])
-            for index, name in enumerate(host[1:], start=1):
-                if show(name): values[name] = cols[index % 3].number_input(name.replace("_", " ").title(), min_value=0.0, value=0.0 if "rate" not in name else 0.5, max_value=1.0 if "rate" in name else None)
-        availability = ["availability_30", "availability_60", "availability_90", "availability_365"]
-        if any(show(v) for v in availability):
-            st.caption("Availability"); cols = st.columns(4)
-            for col, name in zip(cols, availability, strict=True):
-                if show(name): values[name] = col.number_input(name.replace("_", " ").title(), min_value=0, value=0)
-        if show("host_is_superhost"):
-            values["host_is_superhost"] = st.toggle("Superhost", value=False)
-        review = ["amenities_count", "reviews_per_month", "number_of_reviews", "number_of_reviews_ltm", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", "review_scores_checkin", "review_scores_communication", "review_scores_location", "review_scores_value", "has_reviews"]
-        if any(show(v) for v in review):
-            st.caption("Reviews & Amenities"); cols = st.columns(3)
-            for index, name in enumerate(review):
-                if show(name):
-                    if name == "has_reviews": values[name] = cols[index % 3].toggle("Has Reviews", value=True)
-                    else: values[name] = cols[index % 3].number_input(name.replace("_", " ").title(), min_value=0.0, value=0.0)
-        reset, predict = st.columns(2)
-        reset_pressed = reset.form_submit_button("Reset Inputs")
-        predict_pressed = predict.form_submit_button("Predict Price", type="primary")
+        groups = (
+            ("Basic Information", "basic"),
+            ("Review and Availability Information", "review"),
+            ("Host Information and Policy", "host"),
+        )
+        columns = st.columns(3, gap="large")
+        predict_pressed = False
+        for column, (heading, group) in zip(columns, groups, strict=True):
+            with column:
+                st.markdown(f"**{heading}**")
+                for name in features:
+                    spec = PRICE_INPUT_SCHEMA[name]
+                    if spec["group"] != group:
+                        continue
+                    label = str(spec["label"])
+                    if spec["kind"] == "categorical":
+                        choices = options.get(name, [])
+                        if choices:
+                            values[name] = st.selectbox(label, choices, key=f"price_input_{name}")
+                        else:
+                            st.caption(f"{label}: no Gold-table values available")
+                    elif spec["kind"] == "integer":
+                        values[name] = st.number_input(label, min_value=int(spec["min"]), max_value=int(spec["max"]), value=int(spec["default"]), step=1, key=f"price_input_{name}")
+                    else:
+                        values[name] = st.number_input(label, min_value=float(spec["min"]), max_value=float(spec["max"]), value=float(spec["default"]), step=float(spec["step"]), key=f"price_input_{name}")
+                if group == "host":
+                    predict_pressed = st.form_submit_button("Predict Price", type="primary", use_container_width=True)
+        reset_pressed = st.form_submit_button("Reset Inputs")
     return values, reset_pressed, predict_pressed
 
 
@@ -430,25 +411,22 @@ def _promotion_controls() -> None:
 
 
 def _prediction_runner() -> None:
-    selected = set(get_selected_features().get("selected_features", []))
     champion, champion_error = get_active_price_champion()
-    left, right = st.columns([0.95, 1.65], gap="large")
-    with left:
-        inputs, reset, predict = _prediction_inputs(selected)
-        if reset: st.session_state.pop("price_prediction_result", None); st.rerun()
-    with right:
-        _champion_card(champion)
-        if champion_error: st.error(champion_error)
-        if predict and champion is not None:
-            required = [name for name in ("neighbourhood", "room_type", "property_base_group") if name in selected]
-            validation = not all(str(inputs.get(name, "")).strip() for name in required) or inputs.get("maximum_nights", 1) < inputs.get("minimum_nights", 1)
-            if validation: st.error("Complete required categorical fields and ensure maximum nights is not below minimum nights.")
-            else:
-                price, error = predict_single_listing(inputs, champion)
-                if error: st.error(error)
-                else: st.session_state["price_prediction_result"] = {"price": price, "version": str(champion["model_version"]), "inputs": inputs, "time": pd.Timestamp.now()}
-        result = st.session_state.get("price_prediction_result")
-        if result:
+    features, schema_error = get_price_input_features(champion)
+    _champion_card(champion)
+    if champion_error: st.error(champion_error)
+    if schema_error: st.error(schema_error); return
+    inputs, reset, predict = _prediction_inputs(features)
+    if reset: st.session_state.pop("price_prediction_result", None); st.rerun()
+    if predict and champion is not None:
+        missing = [name for name in features if name not in inputs]
+        if missing: st.error("Complete the required fields before requesting a prediction.")
+        else:
+            price, error = predict_single_listing(inputs, champion)
+            if error: st.error(error)
+            else: st.session_state["price_prediction_result"] = {"price": price, "version": str(champion["model_version"]), "inputs": inputs, "time": pd.Timestamp.now()}
+    result = st.session_state.get("price_prediction_result")
+    if result:
             _section("Prediction Result", "Estimated nightly price from the active Champion artifact.")
             result_cols = st.columns(3)
             result_cols[0].metric("Predicted Nightly Price", _number(result["price"], 2))
@@ -463,7 +441,7 @@ def _prediction_runner() -> None:
             history = st.session_state.setdefault("recent_price_predictions", []); history.insert(0, {"Time": result["time"], "Model Version": result["version"], "Predicted Price": result["price"], "Neighbourhood": result["inputs"].get("neighbourhood"), "Room Type": result["inputs"].get("room_type")})
             _section("Recent Predictions", "Session-only history; no predictions are written to the warehouse.")
             st.dataframe(pd.DataFrame(history[:10]), use_container_width=True, hide_index=True)
-        _promotion_controls()
+    _promotion_controls()
 
 
 def render_model_lab_page() -> None:

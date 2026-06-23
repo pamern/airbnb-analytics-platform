@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,71 @@ from utils.sql import query_dataframe
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOGGER = logging.getLogger(__name__)
+
+# Widget rules are centralized here; the active artifact remains the source of
+# truth for which of these raw features are required at prediction time.
+PRICE_INPUT_SCHEMA: dict[str, dict[str, object]] = {
+    "neighbourhood": {"label": "Neighbourhood", "kind": "categorical", "group": "basic"},
+    "room_type": {"label": "Room Type", "kind": "categorical", "group": "basic"},
+    "property_base_group": {"label": "Property Group", "kind": "categorical", "group": "basic"},
+    "accommodates": {"label": "Accommodates", "kind": "integer", "group": "basic", "min": 1, "max": 30, "default": 2},
+    "bedrooms": {"label": "Bedrooms", "kind": "number", "group": "basic", "min": 0.0, "max": 30.0, "step": 0.5, "default": 1.0},
+    "bathrooms": {"label": "Bathrooms", "kind": "number", "group": "basic", "min": 0.0, "max": 30.0, "step": 0.5, "default": 1.0},
+    "review_scores_location": {"label": "Review Score: Location", "kind": "number", "group": "review", "min": 0.0, "max": 5.0, "step": 0.1, "default": 4.5},
+    "number_of_reviews_ltm": {"label": "Number of Reviews LTM", "kind": "integer", "group": "review", "min": 0, "max": 10000, "default": 0},
+    "minimum_nights": {"label": "Minimum Nights", "kind": "integer", "group": "review", "min": 1, "max": 3650, "default": 1},
+    "host_response_time": {"label": "Host Response Time", "kind": "categorical", "group": "host"},
+    "host_response_rate": {"label": "Host Response Rate (%)", "kind": "number", "group": "host", "min": 0.0, "max": 100.0, "step": 1.0, "default": 100.0},
+    "host_acceptance_rate": {"label": "Host Acceptance Rate (%)", "kind": "number", "group": "host", "min": 0.0, "max": 100.0, "step": 1.0, "default": 100.0},
+    "host_listings_count": {"label": "Host Listings Count", "kind": "integer", "group": "host", "min": 0, "max": 100000, "default": 1},
+    "calculated_host_listings_count": {"label": "Calculated Host Listings Count", "kind": "integer", "group": "host", "min": 0, "max": 100000, "default": 1},
+    "host_total_listings_count": {"label": "Host Total Listings Count", "kind": "integer", "group": "host", "min": 0, "max": 100000, "default": 1},
+}
+
+
+def get_price_input_features(champion: pd.Series | None) -> tuple[list[str], str | None]:
+    """Read the exact raw feature schema and target transform from the active artifact."""
+    if champion is None:
+        return [], "No active Price Model Champion is available."
+    artifact_path = str(champion.get("artifact_path", ""))
+    model_path, error = _safe_artifact_path(artifact_path)
+    if error or model_path is None:
+        return [], error
+    try:
+        schema_path = model_path.parent / "feature_schema.json"
+        with schema_path.open(encoding="utf-8") as file:
+            schema = json.load(file)
+        features = schema.get("features")
+        if not isinstance(features, list) or not all(isinstance(feature, str) for feature in features):
+            raise ValueError("feature_schema.json has no valid feature list")
+        if schema.get("target_column") != "log_price":
+            raise ValueError("The active artifact does not confirm a log-price target")
+        unknown = sorted(set(features).difference(PRICE_INPUT_SCHEMA))
+        if unknown:
+            raise ValueError(f"Unsupported feature metadata: {unknown}")
+        return features, None
+    except Exception:
+        LOGGER.exception("Could not load Price Model input schema")
+        return [], "The active Champion input schema is unavailable."
+
+
+def get_price_input_options(features: list[str]) -> tuple[dict[str, list[str]], str | None]:
+    """Read categorical values from the Gold feature table, never from UI constants."""
+    categorical = [feature for feature in features if PRICE_INPUT_SCHEMA[feature]["kind"] == "categorical"]
+    if not categorical:
+        return {}, None
+    selects = [
+        f"select '{feature}' as feature_name, cast(\"{feature}\" as varchar) as option_value "
+        f"from gold.gold_price_model_features where \"{feature}\" is not null"
+        for feature in categorical
+    ]
+    values, error = _read("select distinct feature_name, option_value from (" + " union all ".join(selects) + ") options where trim(option_value) <> '' order by feature_name, option_value")
+    if error:
+        return {}, error
+    return {
+        feature: values.loc[values["feature_name"].eq(feature), "option_value"].astype(str).tolist()
+        for feature in categorical
+    }, None
 
 
 def get_active_price_champion() -> tuple[pd.Series | None, str | None]:
@@ -70,9 +136,20 @@ def predict_single_listing(input_data: dict[str, Any], champion: pd.Series) -> t
     if error:
         return None, error
     try:
-        value = float(np.asarray(model.predict(pd.DataFrame([input_data]))).reshape(-1)[0])
+        features, schema_error = get_price_input_features(champion)
+        if schema_error:
+            return None, schema_error
+        frame = pd.DataFrame([input_data])
+        if set(frame.columns) != set(features):
+            raise ValueError("Prediction input does not match the active Champion schema")
+        frame = frame.loc[:, features]
+        value = float(np.asarray(model.predict(frame)).reshape(-1)[0])
+        if not np.isfinite(value):
+            raise ValueError("Model produced a non-finite value")
+        # get_price_input_features verifies the persisted target_column is log_price.
         return float(np.expm1(value)), None
     except Exception:
+        LOGGER.exception("Price prediction failed")
         return None, "Prediction failed because the input does not match the Champion artifact."
 
 
