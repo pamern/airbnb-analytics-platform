@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import numpy as np
 import streamlit as st
 
 from utils.motherduck import close_connection, connect_motherduck
@@ -15,6 +17,16 @@ from utils.sql import query_dataframe
 
 QueryResult = tuple[pd.DataFrame, str | None]
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ShapArtifactData:
+    shap_values: np.ndarray
+    feature_values: np.ndarray | None
+    feature_names: list[str]
+    base_values: np.ndarray | float | None
+    model_version: str
+    output_scale: str
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -67,7 +79,7 @@ def get_model_metrics(model_name: str, model_version: str | None = None) -> Quer
     )
 
 
-def get_metric_trend(model_name: str, date_from: date | None, date_to: date | None) -> QueryResult:
+def get_metric_trend(model_name: str, date_from: date | None, date_to: date | None, model_version: str | None = None, dataset_split: str | None = None) -> QueryResult:
     clauses, parameters = ["metrics.model_name = ?", "runs.status = 'SUCCESS'"], [model_name]
     if date_from:
         clauses.append("cast(runs.started_at as date) >= ?")
@@ -75,11 +87,21 @@ def get_metric_trend(model_name: str, date_from: date | None, date_to: date | No
     if date_to:
         clauses.append("cast(runs.started_at as date) <= ?")
         parameters.append(date_to)
+    if model_version:
+        clauses.append("metrics.model_version = ?")
+        parameters.append(model_version)
+    if dataset_split:
+        clauses.append("metrics.dataset_split = ?")
+        parameters.append(dataset_split)
     return _read(
         """select metrics.model_version, metrics.metric_name, metrics.metric_value,
                   metrics.dataset_split, runs.started_at
            from mlops.model_metrics as metrics
-           inner join mlops.model_runs as runs on metrics.run_id = runs.run_id
+           inner join (
+               select run_id, status, started_at,
+                      row_number() over (partition by run_id order by created_at desc) as row_num
+               from mlops.model_runs
+           ) as runs on metrics.run_id = runs.run_id and runs.row_num = 1
            where """ + " and ".join(clauses) + " order by runs.started_at",
         tuple(parameters),
     )
@@ -173,25 +195,80 @@ def get_cluster_pca_data(model_version: str | None) -> QueryResult:
     )
 
 
+def resolve_price_shap_artifacts(champion: pd.Series) -> tuple[dict[str, Path] | None, str | None]:
+    """Resolve SHAP files only from the registry-selected Champion directory."""
+    artifact = Path(str(champion.get("artifact_path", "")))
+    root = Path(__file__).resolve().parents[2]
+    resolved = (root / artifact).resolve() if not artifact.is_absolute() else artifact.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        return None, "No SHAP artifact is available for the active Price Champion."
+    directory = resolved if resolved.is_dir() else resolved.parent
+    files = {"sample_values": directory / "shap_sample_values.parquet", "original_importance": directory / "shap_original_importance.csv", "summary": directory / "shap_sample_summary.json"}
+    if not files["sample_values"].is_file():
+        return None, "No SHAP artifact is available for the active Price Champion."
+    return files, None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_price_shap_artifact(model_version: str, artifact_path: str) -> tuple[ShapArtifactData | None, str | None]:
+    """Adapt the persisted long-format SHAP sample for one exact artifact version."""
+    files, error = resolve_price_shap_artifacts(pd.Series({"model_version": model_version, "artifact_path": artifact_path}))
+    if error or files is None:
+        return None, error
+    try:
+        frame = pd.read_parquet(files["sample_values"])
+        LOGGER.info("Loading SHAP artifact path=%s shape=%s columns=%s dtypes=%s", files["sample_values"], frame.shape, frame.columns.tolist(), frame.dtypes.astype(str).to_dict())
+        required = {"feature_name", "shap_value"}
+        if not required.issubset(frame):
+            return None, "The SHAP artifact format is not supported."
+        if "model_version" in frame and not frame["model_version"].astype(str).eq(model_version).all():
+            return None, "The SHAP artifact does not match the selected model version."
+        sample_key = "sample_id" if "sample_id" in frame else "listing_id" if "listing_id" in frame else None
+        if sample_key is None:
+            return None, "The SHAP artifact has no sample identifier."
+        if frame.duplicated([sample_key, "feature_name"]).any():
+            LOGGER.warning("Duplicate SHAP sample-feature records in %s", files["sample_values"])
+            return None, "The SHAP artifact contains duplicate sample-feature records."
+        matrix = frame.pivot(index=sample_key, columns="feature_name", values="shap_value").sort_index(axis=1)
+        values = matrix.to_numpy(dtype=float)
+        if values.ndim != 2 or values.shape[1] != len(matrix.columns) or not np.isfinite(values).all():
+            return None, "The SHAP artifact contains invalid contribution values."
+        feature_values = None
+        if "feature_value" in frame:
+            raw = frame.pivot(index=sample_key, columns="feature_name", values="feature_value").reindex(index=matrix.index, columns=matrix.columns)
+            converted = raw.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+            if converted.shape == values.shape and np.isfinite(converted).any(): feature_values = converted
+        base_values: np.ndarray | float | None = None
+        if "base_value" in frame:
+            base = frame.groupby(sample_key, sort=False)["base_value"].first().reindex(matrix.index).to_numpy(dtype=float)
+            if np.isfinite(base).all(): base_values = base
+        return ShapArtifactData(values, feature_values, matrix.columns.astype(str).tolist(), base_values, model_version, "log_price"), None
+    except Exception:
+        LOGGER.exception("Could not parse Price SHAP artifact path=%s", files["sample_values"])
+        return None, "The SHAP artifact could not be read."
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def get_shap_sample_artifact(model_version: str | None) -> QueryResult:
-    """Load a persisted SHAP sample if the registry/artifact provides one."""
+    """Load the SHAP sample belonging exactly to the selected Price Model version."""
     registry, error = get_model_registry("price_model")
     if error:
         return pd.DataFrame(), error
-    candidates: list[Path] = []
-    if not registry.empty:
-        selected = registry if model_version is None else registry[registry["model_version"].astype(str).eq(model_version)]
-        for artifact_path in selected.get("artifact_path", pd.Series(dtype=str)).dropna():
-            path = Path(str(artifact_path))
-            candidates.extend([path.parent / "shap_sample_values.parquet", path / "shap_sample_values.parquet"])
-    output_root = Path(__file__).resolve().parents[2] / "ml" / "outputs"
-    if output_root.exists():
-        candidates.extend(output_root.rglob("shap_sample_values.parquet"))
-    for path in dict.fromkeys(candidates):
-        try:
-            if path.exists():
-                return pd.read_parquet(path), None
-        except Exception:
-            return pd.DataFrame(), "The SHAP sample artifact could not be read."
-    return pd.DataFrame(), "No SHAP sample artifact is available for this model version."
+    if registry.empty:
+        return pd.DataFrame(), "No SHAP artifact is available for the active Price Champion."
+    selected = registry if model_version is None else registry[registry["model_version"].astype(str).eq(model_version)]
+    if len(selected) != 1:
+        return pd.DataFrame(), "No SHAP artifact is available for the active Price Champion."
+    files, artifact_error = resolve_price_shap_artifacts(selected.iloc[0])
+    if artifact_error or files is None:
+        return pd.DataFrame(), artifact_error
+    try:
+        sample = pd.read_parquet(files["sample_values"])
+        if "model_version" in sample and not sample["model_version"].astype(str).eq(str(selected.iloc[0]["model_version"])).all():
+            return pd.DataFrame(), "No SHAP artifact is available for the active Price Champion."
+        return sample, None
+    except Exception:
+        LOGGER.exception("Price Champion SHAP sample could not be read")
+        return pd.DataFrame(), "The SHAP sample artifact could not be read."

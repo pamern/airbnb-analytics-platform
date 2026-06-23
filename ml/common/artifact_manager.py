@@ -47,6 +47,7 @@ def save_model_artifact(model: Any, artifact_dir: Path) -> Path:
         raise FileExistsError(f"Refusing to overwrite artifact: {path}")
     joblib.dump(model, path)
     loaded = joblib.load(path)
-    if not hasattr(loaded, "predict"):
+    predictive = loaded.get("model") if isinstance(loaded, dict) else loaded
+    if not hasattr(predictive, "predict"):
         raise RuntimeError(f"Saved artifact is not predictive: {path}")
     return path

@@ -52,6 +52,22 @@ def split_train_test(frame: pd.DataFrame, features: Sequence[str], *, target_col
     return train_test_split(frame.loc[:, list(features)], frame[target_column], frame.loc[:, metadata_columns], test_size=test_size, random_state=random_seed)
 
 
+def split_train_calibration_test(frame: pd.DataFrame, features: Sequence[str], *, target_column: str, test_size: float, calibration_size: float, random_seed: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Split raw data 64/16/20 by default, before fitting any preprocessing."""
+    if not 0 < test_size < 1 or not 0 < calibration_size < 1 or test_size + calibration_size >= 1:
+        raise ValueError("test_size and calibration_size must be positive and sum to less than one")
+    metadata_columns = [column for column in ("listing_id", "host_id") if column in frame]
+    development, test = train_test_split(frame, test_size=test_size, random_state=random_seed)
+    calibration_fraction = calibration_size / (1 - test_size)
+    train, calibration = train_test_split(development, test_size=calibration_fraction, random_state=random_seed)
+    def parts(values: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+        return values.loc[:, list(features)], values[target_column], values.loc[:, metadata_columns]
+    X_train, y_train, meta_train = parts(train)
+    X_calibration, y_calibration, meta_calibration = parts(calibration)
+    X_test, y_test, meta_test = parts(test)
+    return X_train, X_calibration, X_test, y_train, y_calibration, y_test, meta_train, meta_calibration, meta_test
+
+
 def build_preprocessor(features: Sequence[str], *, native_missing: bool = True) -> ColumnTransformer:
     """Build the existing imputation, encoding and scaling policy for selected features."""
     selected = set(features)

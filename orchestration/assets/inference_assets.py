@@ -13,7 +13,8 @@ from dagster import AssetKey, asset
 
 from ml.common.paths import REPO_ROOT
 from ml.listing_segmentation.prediction import assign_clusters, load_segmentation_model
-from ml.price_modeling.prediction import load_price_model, predict_price
+from ml.price_modeling.conformal import build_prediction_interval
+from ml.price_modeling.prediction import load_price_artifact, predict_price
 from ml.price_modeling.preprocessing import prepare_modeling_frame
 from orchestration.assets.ml_assets import PRICE_TABLE, SEGMENTATION_TABLE
 from orchestration.mlops import (
@@ -151,10 +152,17 @@ def price_batch_predictions(context, current_price_champion: RegisteredModel, mo
         prepared = prepare_modeling_frame(data)
         if len(prepared) != len(data):
             raise ValueError("Price inference candidates were unexpectedly filtered during feature preparation")
-        predictions = predict_price(load_price_model(current_price_champion.artifact_path), prepared, _artifact_features(current_price_champion.artifact_path))
+        artifact = load_price_artifact(current_price_champion.artifact_path)
+        predictions = predict_price(artifact, prepared, _artifact_features(current_price_champion.artifact_path))
         if len(predictions) != len(prepared) or not np.isfinite(predictions.to_numpy()).all() or (predictions["predicted_price"] < 0).any():
             raise ValueError("Price batch prediction validation failed")
-        return pd.DataFrame({"run_id": context.run_id, "model_version": current_price_champion.model_version, "listing_id": prepared["listing_id"].to_numpy(), "feature_hash": data["feature_hash"].to_numpy(), "predicted_log_price": predictions["predicted_log_price"].to_numpy(), "predicted_price": predictions["predicted_price"].to_numpy(), "prediction_type": "batch", "predicted_at": datetime.now(timezone.utc)})
+        conformal = artifact.get("conformal") if isinstance(artifact, dict) else None
+        if isinstance(conformal, dict):
+            lower, upper = build_prediction_interval(predictions["predicted_price"].to_numpy(), float(conformal["q_hat"]))
+            interval_coverage, interval_method = float(conformal["target_coverage"]), str(conformal["method"])
+        else:
+            lower = upper = np.full(len(predictions), np.nan); interval_coverage = interval_method = None
+        return pd.DataFrame({"run_id": context.run_id, "model_version": current_price_champion.model_version, "listing_id": prepared["listing_id"].to_numpy(), "feature_hash": data["feature_hash"].to_numpy(), "predicted_log_price": predictions["predicted_log_price"].to_numpy(), "predicted_price": predictions["predicted_price"].to_numpy(), "prediction_lower": lower, "prediction_upper": upper, "interval_coverage": interval_coverage, "interval_method": interval_method, "prediction_type": "batch", "predicted_at": datetime.now(timezone.utc)})
     except Exception as error:
         finish_run(motherduck, run_id=context.run_id, status="FAILED", error_message=str(error))
         raise
@@ -194,7 +202,7 @@ def write_price_batch_predictions(context, price_batch_predictions: pd.DataFrame
             duplicate = connection.execute(f"SELECT COUNT(*) FROM {PRICE_PREDICTIONS_TABLE} AS existing JOIN (SELECT ? AS run_id) AS current_run ON existing.run_id = current_run.run_id", [context.run_id]).fetchone()[0]
             if duplicate:
                 raise RuntimeError("Price prediction run was already written")
-            motherduck.append_dataframe(PRICE_PREDICTIONS_TABLE, price_batch_predictions.assign(actual_price=None, actual_log_price=None, residual=None, absolute_error=None).loc[:, ["listing_id", "run_id", "model_version", "feature_hash", "actual_price", "predicted_price", "actual_log_price", "predicted_log_price", "residual", "absolute_error", "prediction_type", "predicted_at"]], connection=connection)
+            motherduck.append_dataframe(PRICE_PREDICTIONS_TABLE, price_batch_predictions.assign(actual_price=None, actual_log_price=None, residual=None, absolute_error=None).loc[:, ["listing_id", "run_id", "model_version", "feature_hash", "actual_price", "predicted_price", "actual_log_price", "predicted_log_price", "residual", "absolute_error", "prediction_lower", "prediction_upper", "interval_coverage", "interval_method", "prediction_type", "predicted_at"]], connection=connection)
         finish_run(motherduck, run_id=context.run_id, status="SUCCESS")
         return len(price_batch_predictions)
     except Exception as error:

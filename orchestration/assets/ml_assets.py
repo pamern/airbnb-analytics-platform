@@ -56,7 +56,8 @@ def segmentation_training_result(context, motherduck: MotherDuckResource) -> Seg
 def price_model_artifact(price_training_result: PriceTrainingResult) -> dict[str, str]:
     """Verify that the ML-owned price artifact exists and can be loaded."""
     path = price_training_result.artifact_paths["model"]
-    if not path.is_file() or not hasattr(joblib.load(path), "predict"):
+    loaded = joblib.load(path); predictive = loaded.get("model") if isinstance(loaded, dict) else loaded
+    if not path.is_file() or not hasattr(predictive, "predict"):
         raise RuntimeError(f"Price artifact is unavailable or invalid: {path}")
     return {"model_version": price_training_result.model_version, "artifact_path": str(path)}
 

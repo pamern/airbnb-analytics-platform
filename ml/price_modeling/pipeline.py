@@ -18,12 +18,13 @@ from ml.common.artifact_manager import create_versioned_artifact_dir, save_model
 from ml.common.paths import REPO_ROOT
 from ml.common.run_metadata import build_model_metric_records, build_model_registry_record, build_training_run_record
 from ml.price_modeling.config import PriceModelConfig, TrainingMode
+from ml.price_modeling.conformal import build_prediction_interval, compute_conformal_quantile
 from ml.price_modeling.data import load_local_price_data, validate_input_schema
 from ml.price_modeling.error_analysis import build_prediction_error_frame
 from ml.price_modeling.evaluation import build_metrics_long_format, evaluate_regression_model
 from ml.price_modeling.explainability import ShapResult, calculate_shap_results
 from ml.price_modeling.prediction import predict_price
-from ml.price_modeling.preprocessing import build_preprocessor, prepare_modeling_frame, split_train_test
+from ml.price_modeling.preprocessing import build_preprocessor, prepare_modeling_frame, split_train_calibration_test
 from ml.price_modeling.training import build_price_pipeline, train_price_model
 from ml.price_modeling.tuning import tune_model
 
@@ -77,6 +78,15 @@ def _write_shap_artifacts(artifact_dir: Path, result: ShapResult) -> dict[str, P
     return {"shap_transformed_importance": transformed, "shap_original_importance": original, "shap_sample_values": detail, "shap_sample_summary": summary, "feature_names": names}
 
 
+def _training_domain(features: pd.DataFrame) -> dict[str, dict[str, object]]:
+    """Persist only raw train-domain ranges/categories needed for reliability checks."""
+    numeric = features.select_dtypes(include=np.number)
+    return {
+        "numeric_ranges": {name: [float(values.min()), float(values.max())] for name, values in numeric.items() if values.notna().any()},
+        "categorical_values": {name: sorted(values.dropna().astype(str).unique().tolist()) for name, values in features.items() if name not in numeric},
+    }
+
+
 def run_price_training_pipeline(data: pd.DataFrame, config: PriceModelConfig | None = None, training_mode: TrainingMode | None = None) -> TrainingResult:
     """Train locally from a caller-supplied frame; never connects to a warehouse."""
     config = config or PriceModelConfig(); mode = training_mode or config.training_mode
@@ -87,7 +97,10 @@ def run_price_training_pipeline(data: pd.DataFrame, config: PriceModelConfig | N
     validate_input_schema(data, required)
     frame = prepare_modeling_frame(data, price_column=config.price_column, target_column=config.target_column)
     if frame.empty: raise ValueError("No positive-price rows remain after target preparation")
-    X_train, X_test, y_train, y_test, meta_train, meta_test = split_train_test(frame, config.selected_features, target_column=config.target_column, test_size=config.test_size, random_seed=config.random_seed)
+    X_train, X_calibration, X_test, y_train, y_calibration, y_test, meta_train, meta_calibration, meta_test = split_train_calibration_test(
+        frame, config.selected_features, target_column=config.target_column, test_size=config.test_size,
+        calibration_size=config.calibration_size, random_seed=config.random_seed,
+    )
     effective_config = config
     tuning_trials: pd.DataFrame | None = None
     if mode == "tune":
@@ -97,12 +110,36 @@ def run_price_training_pipeline(data: pd.DataFrame, config: PriceModelConfig | N
     preprocessor = build_preprocessor(effective_config.selected_features)
     model = train_price_model(build_price_pipeline(preprocessor, effective_config), X_train, y_train)
     metrics, predicted_log = evaluate_regression_model(model, X_test, y_test)
+    calibration_log = np.asarray(model.predict(X_calibration), dtype=float)
+    calibration_price = np.expm1(y_calibration.to_numpy(dtype=float))
+    calibration_predicted_price = np.expm1(calibration_log)
+    q_hat = compute_conformal_quantile(calibration_price, calibration_predicted_price, effective_config.conformal_coverage)
+    predicted_price = np.expm1(predicted_log)
+    actual_price = np.expm1(y_test.to_numpy(dtype=float))
+    lower, upper = build_prediction_interval(predicted_price, q_hat)
+    covered = (actual_price >= lower) & (actual_price <= upper)
+    widths = upper - lower
+    metrics.update({
+        "prediction_interval_coverage": float(covered.mean()),
+        "mean_prediction_interval_width": float(widths.mean()),
+        "median_prediction_interval_width": float(np.median(widths)),
+        "mean_interval_width_ratio": float((widths / np.maximum(predicted_price, 1.0)).mean()),
+        "conformal_q_hat": q_hat,
+        "conformal_target_coverage": effective_config.conformal_coverage,
+        "calibration_sample_size": float(len(X_calibration)),
+    })
     version = _new_version()
     run_id = version.removeprefix("price_v")
     shap_result = calculate_shap_results(model, X_test, meta_test, run_id=run_id, model_name="price_model", model_version=version, sample_size=effective_config.shap_sample_size, random_state=effective_config.shap_random_state)
     artifact_dir = create_versioned_artifact_dir(Path(effective_config.artifact_root), version)
     try:
-        model_path = save_model_artifact(model, artifact_dir)
+        artifact_bundle = {
+            "model": model, "model_version": version, "target_transform": "log1p",
+            "raw_feature_names": list(effective_config.selected_features),
+            "conformal": {"method": "split_conformal_absolute_residual", "target_coverage": effective_config.conformal_coverage, "q_hat": q_hat, "calibration_sample_size": int(len(X_calibration))},
+            "training_domain": _training_domain(X_train),
+        }
+        model_path = save_model_artifact(artifact_bundle, artifact_dir)
         feature_schema_path = write_json(artifact_dir / "feature_schema.json", {"features": list(effective_config.selected_features), "target_column": effective_config.target_column, "feature_set_version": effective_config.feature_set_version})
         config_path = write_json(artifact_dir / "training_config.json", asdict(effective_config))
         metrics_path = write_json(artifact_dir / "metrics.json", metrics)

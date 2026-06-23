@@ -34,6 +34,8 @@ class PriceModelConfig:
     price_column: str = "price"
     random_seed: int = 42
     test_size: float = 0.2
+    calibration_size: float = 0.2
+    conformal_coverage: float = 0.90
     n_splits: int = 5
     primary_metric: str = "rmse"
     secondary_metrics: tuple[str, ...] = ("mae", "r2", "adjusted_r2")

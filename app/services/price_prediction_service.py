@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +16,25 @@ import streamlit as st
 from services.model_performance_service import QueryResult, _read, get_model_metrics, get_model_registry
 from utils.motherduck import close_connection, connect_motherduck
 from utils.sql import query_dataframe
+from ml.price_modeling.conformal import build_prediction_interval
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOGGER = logging.getLogger(__name__)
+
+RELIABILITY_HIGH_WIDTH_RATIO = 0.30
+RELIABILITY_MEDIUM_WIDTH_RATIO = 0.60
+
+
+@dataclass(frozen=True)
+class PricePredictionResult:
+    predicted_price: float
+    prediction_lower: float | None
+    prediction_upper: float | None
+    target_coverage: float | None
+    reliability_level: str | None
+    reliability_reasons: list[str]
+    model_version: str
+    local_shap: pd.DataFrame | None = None
 
 # Widget rules are centralized here; the active artifact remains the source of
 # truth for which of these raw features are required at prediction time.
@@ -64,6 +81,39 @@ def get_price_input_features(champion: pd.Series | None) -> tuple[list[str], str
     except Exception:
         LOGGER.exception("Could not load Price Model input schema")
         return [], "The active Champion input schema is unavailable."
+
+
+def extract_predictor(artifact: Any) -> Any:
+    """Return a predictor from a legacy pipeline or supported artifact bundle."""
+    if isinstance(artifact, dict):
+        for key in ("model", "pipeline", "estimator"):
+            if artifact.get(key) is not None:
+                return artifact[key]
+        raise ValueError("Artifact bundle does not contain a predictor.")
+    return artifact
+
+
+def get_expected_raw_features(artifact: Any, predictor: Any, fallback: list[str]) -> list[str]:
+    """Prefer persisted artifact metadata, then fitted pipeline metadata, then schema file."""
+    if isinstance(artifact, dict) and artifact.get("raw_feature_names"):
+        return [str(name) for name in artifact["raw_feature_names"]]
+    names = getattr(predictor, "feature_names_in_", None)
+    return [str(name) for name in names] if names is not None else fallback
+
+
+def build_price_input_frame(form_values: dict[str, Any], expected_features: list[str]) -> pd.DataFrame:
+    """Select and order only Price Champion raw inputs, excluding Segment-only fields."""
+    missing = [name for name in expected_features if name not in form_values]
+    if missing:
+        raise ValueError(f"Missing Price Model features: {missing}")
+    frame = pd.DataFrame([{name: form_values[name] for name in expected_features}])
+    for name in ("accommodates", "host_listings_count", "calculated_host_listings_count", "host_total_listings_count", "number_of_reviews_ltm", "minimum_nights"):
+        if name in frame: frame[name] = pd.to_numeric(frame[name], errors="raise").astype(int)
+    for name in ("bedrooms", "bathrooms", "host_response_rate", "host_acceptance_rate", "review_scores_location"):
+        if name in frame: frame[name] = pd.to_numeric(frame[name], errors="raise").astype(float)
+    for name in ("neighbourhood", "room_type", "property_base_group", "host_response_time"):
+        if name in frame: frame[name] = frame[name].astype(str)
+    return frame.loc[:, expected_features]
 
 
 def get_price_input_options(features: list[str]) -> tuple[dict[str, list[str]], str | None]:
@@ -131,26 +181,77 @@ def load_price_model_artifact(model_version: str, artifact_path: str) -> tuple[A
         return None, "The Champion model artifact could not be loaded."
 
 
-def predict_single_listing(input_data: dict[str, Any], champion: pd.Series) -> tuple[float | None, str | None]:
-    model, error = load_price_model_artifact(str(champion["model_version"]), str(champion["artifact_path"]))
-    if error:
+def assess_prediction_reliability(input_data: dict[str, Any], predicted_price: float, lower_price: float, upper_price: float, training_domain: dict[str, Any] | None) -> tuple[str, list[str]]:
+    """Classify reliability from conformal width and persisted train-domain metadata."""
+    reasons: list[str] = []
+    width_ratio = (upper_price - lower_price) / max(predicted_price, 1.0)
+    if width_ratio > RELIABILITY_MEDIUM_WIDTH_RATIO:
+        reasons.append("The prediction interval is relatively wide.")
+    elif width_ratio <= RELIABILITY_HIGH_WIDTH_RATIO:
+        reasons.append("The prediction interval is relatively narrow.")
+    domain = training_domain or {}
+    numeric_ranges = domain.get("numeric_ranges", {}) if isinstance(domain, dict) else {}
+    categorical_values = domain.get("categorical_values", {}) if isinstance(domain, dict) else {}
+    warnings = 0
+    for name, bounds in numeric_ranges.items():
+        value = input_data.get(name)
+        if value is None or not np.isfinite(float(value)):
+            warnings += 1; reasons.append(f"{name.replace('_', ' ').title()} is missing.")
+        elif len(bounds) == 2 and (float(value) < float(bounds[0]) or float(value) > float(bounds[1])):
+            warnings += 1; reasons.append(f"{name.replace('_', ' ').title()} is outside the training range.")
+    for name, known in categorical_values.items():
+        value = input_data.get(name)
+        if value is None or str(value) not in set(map(str, known)):
+            warnings += 1; reasons.append(f"{name.replace('_', ' ').title()} was not present in training data.")
+    if not warnings and width_ratio <= RELIABILITY_HIGH_WIDTH_RATIO:
+        reasons.append("Input falls within the recorded training domain.")
+        return "High", reasons
+    if width_ratio <= RELIABILITY_MEDIUM_WIDTH_RATIO and warnings <= 1:
+        return "Medium", reasons
+    return "Low", reasons
+
+
+def predict_single_listing(input_data: dict[str, Any], champion: pd.Series) -> tuple[PricePredictionResult | None, str | None]:
+    artifact, error = load_price_model_artifact(str(champion["model_version"]), str(champion["artifact_path"]))
+    if error or artifact is None:
         return None, error
+    input_frame = pd.DataFrame()
     try:
         features, schema_error = get_price_input_features(champion)
         if schema_error:
             return None, schema_error
-        frame = pd.DataFrame([input_data])
-        if set(frame.columns) != set(features):
-            raise ValueError("Prediction input does not match the active Champion schema")
-        frame = frame.loc[:, features]
-        value = float(np.asarray(model.predict(frame)).reshape(-1)[0])
+        model = extract_predictor(artifact)
+        expected_features = get_expected_raw_features(artifact, model, features)
+        LOGGER.info("Loaded Price Champion: version=%s artifact_type=%s expected_features=%s", champion.get("model_version"), type(artifact).__name__, expected_features)
+        input_frame = build_price_input_frame(input_data, expected_features)
+        value = float(np.asarray(model.predict(input_frame)).reshape(-1)[0])
         if not np.isfinite(value):
             raise ValueError("Model produced a non-finite value")
-        # get_price_input_features verifies the persisted target_column is log_price.
-        return float(np.expm1(value)), None
+        predicted_price = float(np.expm1(value))
+        conformal = artifact.get("conformal") if isinstance(artifact, dict) else None
+        if not isinstance(conformal, dict):
+            local_shap = None
+            try:
+                from ml.price_modeling.explainability import explain_single_prediction
+                LOGGER.info("Local SHAP diagnostics: model_version=%s artifact_type=%s predictor_type=%s has_explainer=%s", champion["model_version"], type(artifact).__name__, type(model).__name__, False)
+                local_shap = explain_single_prediction(model, input_frame).head(10)
+            except Exception:
+                LOGGER.exception("Local SHAP is unavailable for Price Model version %s", champion["model_version"])
+            return PricePredictionResult(predicted_price, None, None, None, None, ["Conformal interval is unavailable for this legacy artifact."], str(champion["model_version"]), local_shap), None
+        q_hat = float(conformal["q_hat"])
+        lower, upper = build_prediction_interval(predicted_price, q_hat)
+        reliability, reasons = assess_prediction_reliability(input_data, predicted_price, float(lower), float(upper), artifact.get("training_domain"))
+        local_shap = None
+        try:
+            from ml.price_modeling.explainability import explain_single_prediction
+            LOGGER.info("Local SHAP diagnostics: model_version=%s artifact_type=%s predictor_type=%s has_explainer=%s", champion["model_version"], type(artifact).__name__, type(model).__name__, bool(isinstance(artifact, dict) and (artifact.get("shap_explainer") or artifact.get("explainer"))))
+            local_shap = explain_single_prediction(model, input_frame).head(10)
+        except Exception:
+            LOGGER.exception("Local SHAP is unavailable for Price Model version %s", champion["model_version"])
+        return PricePredictionResult(predicted_price, float(lower), float(upper), float(conformal.get("target_coverage")), reliability, reasons, str(champion["model_version"]), local_shap), None
     except Exception:
-        LOGGER.exception("Price prediction failed")
-        return None, "Prediction failed because the input does not match the Champion artifact."
+        LOGGER.exception("Price prediction failed for model_version=%s; input_columns=%s", champion.get("model_version"), list(input_frame.columns))
+        return None, "Prediction failed because the submitted features are incompatible with the active Price Champion."
 
 
 def get_comparable_listings(input_data: dict[str, Any]) -> QueryResult:
@@ -198,6 +299,7 @@ def set_price_champion(candidate_version: str, promoted_by: str = "streamlit") -
         connection.execute("commit")
         transaction_started = False
         st.cache_data.clear()
+        st.cache_resource.clear()
         return None
     except Exception:
         LOGGER.exception("Price Champion promotion failed")

@@ -33,6 +33,10 @@ def ensure_mlops_tables(connection: Any) -> None:
         connection.execute(statement)
     connection.execute("ALTER TABLE mlops.model_feature_importance ADD COLUMN IF NOT EXISTS source_feature VARCHAR")
     connection.execute("ALTER TABLE mlops.model_feature_importance ADD COLUMN IF NOT EXISTS feature_level VARCHAR")
+    connection.execute("ALTER TABLE gold.gold_listing_price_predictions ADD COLUMN IF NOT EXISTS prediction_lower DOUBLE")
+    connection.execute("ALTER TABLE gold.gold_listing_price_predictions ADD COLUMN IF NOT EXISTS prediction_upper DOUBLE")
+    connection.execute("ALTER TABLE gold.gold_listing_price_predictions ADD COLUMN IF NOT EXISTS interval_coverage DOUBLE")
+    connection.execute("ALTER TABLE gold.gold_listing_price_predictions ADD COLUMN IF NOT EXISTS interval_method VARCHAR")
 
 
 def start_run(motherduck: MotherDuckResource, *, run_id: str, job_name: str, model_name: str, model_version: str | None, run_type: str, artifact_path: str | None = None) -> None:
