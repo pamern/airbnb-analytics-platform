@@ -14,6 +14,8 @@ import pandas as pd
 import streamlit as st
 
 from services.model_performance_service import QueryResult, _read, get_model_registry
+from services.price_prediction_service import get_selectable_model_versions, set_model_champion
+from ml.price_modeling.preprocessing import group_property_type
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +43,14 @@ def get_active_segment_champion() -> tuple[pd.Series | None, str | None]:
     return champions.iloc[0], None
 
 
+def get_selectable_segment_versions() -> QueryResult:
+    return get_selectable_model_versions(SEGMENT_MODEL_NAME)
+
+
+def set_segmentation_champion(selected_version: str, promoted_by: str = "streamlit") -> str | None:
+    return set_model_champion(SEGMENT_MODEL_NAME, selected_version, promoted_by)
+
+
 def _artifact_path(value: str) -> Path | None:
     candidate = Path(value); resolved = (PROJECT_ROOT / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
     try: resolved.relative_to(PROJECT_ROOT)
@@ -64,10 +74,13 @@ def get_segment_input_features(champion: pd.Series | None) -> tuple[list[str], s
 def build_segment_input_frame(form_values: dict[str, Any], expected_features: list[str]) -> pd.DataFrame:
     """Build the Segment-only raw frame; derived minimum_nights_log is explicit."""
     values = dict(form_values)
+    if "property_base_group" in expected_features and "property_base_group" not in values and "property_type" in values:
+        values["property_base_group"] = group_property_type(values["property_type"])
     if "minimum_nights_log" in expected_features and "minimum_nights_log" not in values:
         if "minimum_nights" not in values: raise ValueError("Missing source field minimum_nights for Segment Model")
         values["minimum_nights_log"] = float(np.log1p(float(values["minimum_nights"])))
     missing = [name for name in expected_features if name not in values]
+    LOGGER.info("Segment input diagnostics: expected=%s actual=%s missing=%s extra=%s", expected_features, list(values), missing, sorted(set(values).difference(expected_features)))
     if missing: raise ValueError(f"Missing Segment Model features: {missing}")
     frame = pd.DataFrame([{name: values[name] for name in expected_features}])
     for name in expected_features:

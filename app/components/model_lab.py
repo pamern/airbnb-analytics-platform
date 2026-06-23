@@ -30,7 +30,8 @@ from services.price_prediction_service import (
 from services.segment_prediction_service import (
     SEGMENT_ONLY_INPUT_SCHEMA, MIN_SEGMENT_DISTRIBUTION_SIZE,
     get_active_segment_champion, get_cluster_price_distribution, get_cluster_profile,
-    get_segment_input_features, predict_listing_segment,
+    get_segment_input_features, get_selectable_segment_versions,
+    predict_listing_segment, set_segmentation_champion,
 )
 from styles.design_tokens import DESIGN_TOKENS as T
 
@@ -383,7 +384,7 @@ def _segmentation_model(filters: dict[str, object]) -> None:
             st.caption(f"Explained variance PC1: {variance[0]:.1%} · PC2: {variance[1]:.1%} · displaying up to 2,500 listings.")
             hover = [column for column in ("listing_id", "cluster_id", "cluster_name", "distance_to_centroid") if column in projection]
             st.plotly_chart(_layout(px.scatter(projection, x="PCA Component 1", y="PCA Component 2", color="cluster_id", hover_data=hover, color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"], T["chart_danger"], T["color_info"]])), use_container_width=True)
-    assignments, assignment_error = get_cluster_assignments(version); trend, trend_error = get_metric_trend("segmentation_model", current["date_from"], current["date_to"]); left, right = st.columns(2)
+    assignments, assignment_error = get_cluster_assignments(version); trend, trend_error = get_metric_trend("segmentation_model", current["date_from"], current["date_to"], model_version=version); left, right = st.columns(2)
     with left:
         _section("Cluster Distribution", "Listing counts by cluster for the selected model version.")
         if not _error(assignment_error) and not assignments.empty: st.plotly_chart(_layout(px.bar(assignments, x="cluster_id", y="listing_count", color_discrete_sequence=[T["chart_primary"]])), use_container_width=True)
@@ -392,12 +393,17 @@ def _segmentation_model(filters: dict[str, object]) -> None:
         _section("Segmentation Metric Trend", "Metrics from successful segmentation runs.")
         if not _error(trend_error) and not trend.empty:
             metric_names = sorted(trend["metric_name"].dropna().astype(str).unique().tolist())
-            selected_metrics = st.multiselect("Segmentation Metrics", metric_names, default=metric_names, key="segmentation_metric_trend")
-            visible = trend[trend["metric_name"].astype(str).isin(selected_metrics)]
-            if visible.empty: st.info("No successful runs match the selected metrics.")
-            else: st.plotly_chart(_layout(px.line(visible, x="started_at", y="metric_value", color="metric_name", symbol="model_version", markers=True, hover_data=["model_version", "dataset_split", "started_at"], color_discrete_sequence=[T["chart_primary"], T["chart_secondary"], T["chart_success"]])), use_container_width=True)
+            preferred = next((metric for metric in ("silhouette_score", "davies_bouldin_score", "calinski_harabasz_score", "inertia") if metric in metric_names), metric_names[0])
+            if st.session_state.get("segmentation_metric_name") not in metric_names: st.session_state.pop("segmentation_metric_name", None)
+            selected_metric = st.selectbox("Segmentation Metric", metric_names, index=metric_names.index(preferred), key="segmentation_metric_name")
+            visible = trend[trend["metric_name"].astype(str).eq(selected_metric)]
+            title = f"{selected_metric.replace('_', ' ').title()} Trend — {version}"
+            if len(visible) == 1:
+                st.plotly_chart(_layout(px.scatter(visible, x="started_at", y="metric_value", title=title, color_discrete_sequence=[T["chart_primary"]])), use_container_width=True); st.caption("Only one successful run is available for this model version.")
+            else: st.plotly_chart(_layout(px.line(visible, x="started_at", y="metric_value", title=title, markers=True, color_discrete_sequence=[T["chart_primary"]])), use_container_width=True)
     _section("Cluster Profiles", "Available profile fields are read directly from the Gold table.")
     if not _error(profile_error): st.dataframe(profiles, use_container_width=True, hide_index=True) if not profiles.empty else st.info("No cluster profiles are available for this model version.")
+    _segmentation_promotion_controls(champion)
     _tables("segmentation_model", registry, current)
 
 
@@ -434,7 +440,10 @@ def _prediction_inputs(features: list[str], segment_features: list[str]) -> tupl
                     if spec["kind"] == "categorical":
                         choices = options.get(name, [])
                         if choices:
-                            values[name] = st.selectbox(label, choices, key=f"price_input_{name}")
+                            if name == "property_base_group":
+                                values["property_type"] = st.selectbox("Property Type", choices, key="price_input_property_type")
+                            else:
+                                values[name] = st.selectbox(label, choices, key=f"price_input_{name}")
                         else:
                             st.caption(f"{label}: no Gold-table values available")
                     elif spec["kind"] == "integer":
@@ -513,6 +522,36 @@ def _promotion_controls() -> None:
         else: st.success(f"{candidate} is now the active Price Model Champion."); st.rerun()
 
 
+def _segmentation_promotion_controls(champion: pd.Series | None) -> None:
+    """Keep Segmentation Champion selection independent from Price Champion state."""
+    selectable, error = get_selectable_segment_versions()
+    if _error(error): return
+    _section("Segmentation Champion Management", "Promote a Candidate or restore an Archived Segmentation Model version.")
+    if selectable.empty:
+        st.info("No Segmentation Candidate or Archived version is currently available.")
+        return
+    versions = selectable["model_version"].astype(str).tolist()
+    selected_version = st.selectbox(
+        "Select Segmentation Version",
+        versions,
+        format_func=lambda version: f"{version} — {selectable.loc[selectable['model_version'].astype(str).eq(version), 'stage'].iloc[0].title()}",
+        key="segmentation_champion_version",
+    )
+    selected = selectable.loc[selectable["model_version"].astype(str).eq(selected_version)].iloc[0]
+    action = "Restore" if str(selected["stage"]).strip().upper() == "ARCHIVED" else "Promote"
+    current = str(champion["model_version"]) if champion is not None else "No active Champion"
+    st.caption(f"Current Champion: {current} · Selected Stage: {str(selected['stage']).title()} · Action: {action}")
+    if action == "Restore": st.warning("This will restore a previously archived Segmentation Model as the active Champion.")
+    confirm = st.checkbox("I confirm the current Segmentation Champion will be archived.", key="segmentation_promotion_confirmation")
+    if st.button(f"{action} as Segmentation Champion", type="primary", disabled=not confirm, key="set_segmentation_champion"):
+        promotion_error = set_segmentation_champion(selected_version)
+        if promotion_error: st.error(promotion_error)
+        else:
+            st.session_state.pop("price_prediction_result", None)
+            st.success(f"{selected_version} is now the active Segmentation Model Champion.")
+            st.rerun()
+
+
 def _prediction_runner() -> None:
     champion, champion_error = get_active_price_champion()
     segment_champion, segment_champion_error = get_active_segment_champion()
@@ -524,7 +563,7 @@ def _prediction_runner() -> None:
     inputs, reset, predict = _prediction_inputs(features, segment_features)
     if reset: st.session_state.pop("price_prediction_result", None); st.rerun()
     if predict and champion is not None:
-        missing = [name for name in features if name not in inputs]
+        missing = [name for name in features if name not in inputs and not (name == "property_base_group" and "property_type" in inputs)]
         if missing: st.error("Complete the required fields before requesting a prediction.")
         else:
             price, error = predict_single_listing(inputs, champion)
@@ -556,8 +595,6 @@ def _prediction_runner() -> None:
                 chart.update_layout(showlegend=False, xaxis_title="SHAP contribution (log-price)", yaxis_title=None)
                 st.plotly_chart(_layout(chart, max(300, 34 * len(local))), use_container_width=True)
                 st.caption("Positive contributions increase predicted log-price; negative contributions decrease it.")
-            _section("Prediction Notes", "Rule-based notes only use available model and market data.")
-            st.info("Prediction notes will appear when local SHAP or sufficient comparable-market data is available.")
             history = st.session_state.setdefault("recent_price_predictions", []); history.insert(0, {"Time": result["time"], "Model Version": prediction.model_version, "Predicted Price": prediction.predicted_price, "Neighbourhood": result["inputs"].get("neighbourhood"), "Room Type": result["inputs"].get("room_type")})
             _section("Recent Predictions", "Session-only history; no predictions are written to the warehouse.")
             st.dataframe(pd.DataFrame(history[:10]), use_container_width=True, hide_index=True)

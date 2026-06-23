@@ -16,6 +16,7 @@ import streamlit as st
 from services.model_performance_service import QueryResult, _read, get_model_metrics, get_model_registry
 from utils.motherduck import close_connection, connect_motherduck
 from utils.sql import query_dataframe
+from ml.price_modeling.preprocessing import group_property_type
 from ml.price_modeling.conformal import build_prediction_interval
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -103,10 +104,15 @@ def get_expected_raw_features(artifact: Any, predictor: Any, fallback: list[str]
 
 def build_price_input_frame(form_values: dict[str, Any], expected_features: list[str]) -> pd.DataFrame:
     """Select and order only Price Champion raw inputs, excluding Segment-only fields."""
-    missing = [name for name in expected_features if name not in form_values]
+    prepared_values = dict(form_values)
+    if "property_base_group" in expected_features and "property_base_group" not in prepared_values and "property_type" in prepared_values:
+        prepared_values["property_base_group"] = group_property_type(prepared_values["property_type"])
+    missing = [name for name in expected_features if name not in prepared_values]
+    extras = sorted(set(prepared_values).difference(expected_features))
+    LOGGER.info("Price input diagnostics: expected=%s actual=%s missing=%s extra=%s", expected_features, list(prepared_values), missing, extras)
     if missing:
         raise ValueError(f"Missing Price Model features: {missing}")
-    frame = pd.DataFrame([{name: form_values[name] for name in expected_features}])
+    frame = pd.DataFrame([{name: prepared_values[name] for name in expected_features}])
     for name in ("accommodates", "host_listings_count", "calculated_host_listings_count", "host_total_listings_count", "number_of_reviews_ltm", "minimum_nights"):
         if name in frame: frame[name] = pd.to_numeric(frame[name], errors="raise").astype(int)
     for name in ("bedrooms", "bathrooms", "host_response_rate", "host_acceptance_rate", "review_scores_location"):
@@ -122,8 +128,8 @@ def get_price_input_options(features: list[str]) -> tuple[dict[str, list[str]], 
     if not categorical:
         return {}, None
     selects = [
-        f"select '{feature}' as feature_name, cast(\"{feature}\" as varchar) as option_value "
-        f"from gold.gold_price_model_features where \"{feature}\" is not null"
+        f"select '{feature}' as feature_name, cast(\"{'property_type' if feature == 'property_base_group' else feature}\" as varchar) as option_value "
+        f"from gold.gold_price_model_features where \"{'property_type' if feature == 'property_base_group' else feature}\" is not null"
         for feature in categorical
     ]
     values, error = _read("select distinct feature_name, option_value from (" + " union all ".join(selects) + ") options where trim(option_value) <> '' order by feature_name, option_value")
@@ -149,10 +155,16 @@ def get_active_price_champion() -> tuple[pd.Series | None, str | None]:
 
 
 def get_price_candidates() -> QueryResult:
+    return get_selectable_model_versions("price_model")
+
+
+def get_selectable_model_versions(model_name: str) -> QueryResult:
     return _read(
-        """select model_version, created_at, artifact_path from mlops.model_registry
-           where model_name = 'price_model' and upper(trim(stage)) = 'CANDIDATE' and is_active = false
-           order by created_at desc"""
+        """select model_version, stage, created_at, promoted_at, promoted_by, artifact_path
+           from mlops.model_registry where model_name = ?
+             and upper(trim(stage)) in ('CANDIDATE', 'ARCHIVED') and is_active = false
+           order by case when upper(trim(stage)) = 'CANDIDATE' then 0 else 1 end, created_at desc""",
+        (model_name,),
     )
 
 
@@ -271,28 +283,28 @@ def get_comparable_listings(input_data: dict[str, Any]) -> QueryResult:
     )
 
 
-def set_price_champion(candidate_version: str, promoted_by: str = "streamlit") -> str | None:
-    """Promote one verified candidate atomically; callers must collect confirmation first."""
+def set_model_champion(model_name: str, selected_version: str, promoted_by: str = "streamlit") -> str | None:
+    """Promote or restore one inactive Candidate/Archived version atomically."""
     connection = None
     transaction_started = False
     try:
         connection = connect_motherduck(read_only=False)
         connection.execute("begin transaction")
         transaction_started = True
-        candidate = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = 'price_model' and model_version = ? and upper(trim(stage)) = 'CANDIDATE' and is_active = false", [candidate_version])
-        champion = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = 'price_model' and upper(trim(stage)) = 'CHAMPION' and is_active = true", [])
-        if len(candidate) != 1 or len(champion) != 1:
+        selected = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = ? and model_version = ? and upper(trim(stage)) in ('CANDIDATE', 'ARCHIVED') and is_active = false", [model_name, selected_version])
+        champion = query_dataframe(connection, "select model_version from mlops.model_registry where model_name = ? and upper(trim(stage)) = 'CHAMPION' and is_active = true", [model_name])
+        if len(selected) != 1 or len(champion) > 1:
             connection.execute("rollback")
             transaction_started = False
-            return "Promotion requires exactly one active Champion and one inactive Candidate."
-        connection.execute("update mlops.model_registry set stage = 'ARCHIVED', is_active = false where model_name = 'price_model' and upper(trim(stage)) = 'CHAMPION' and is_active = true")
-        connection.execute("update mlops.model_registry set stage = 'CHAMPION', is_active = true, promoted_at = current_timestamp, promoted_by = ? where model_name = 'price_model' and model_version = ? and upper(trim(stage)) = 'CANDIDATE' and is_active = false", [promoted_by, candidate_version])
+            return "Champion selection requires one inactive Candidate or Archived version and at most one active Champion."
+        connection.execute("update mlops.model_registry set stage = 'ARCHIVED', is_active = false where model_name = ? and upper(trim(stage)) = 'CHAMPION' and is_active = true", [model_name])
+        connection.execute("update mlops.model_registry set stage = 'CHAMPION', is_active = true, promoted_at = current_timestamp, promoted_by = ? where model_name = ? and model_version = ? and upper(trim(stage)) in ('CANDIDATE', 'ARCHIVED') and is_active = false", [promoted_by, model_name, selected_version])
         verified = query_dataframe(
             connection,
-            "select model_version from mlops.model_registry where model_name = 'price_model' and upper(trim(stage)) = 'CHAMPION' and is_active = true",
-            [],
+            "select model_version from mlops.model_registry where model_name = ? and upper(trim(stage)) = 'CHAMPION' and is_active = true",
+            [model_name],
         )
-        if len(verified) != 1 or str(verified.iloc[0]["model_version"]) != candidate_version:
+        if len(verified) != 1 or str(verified.iloc[0]["model_version"]) != selected_version:
             connection.execute("rollback")
             transaction_started = False
             return "Promotion verification failed; the registry transaction was rolled back."
@@ -302,7 +314,7 @@ def set_price_champion(candidate_version: str, promoted_by: str = "streamlit") -
         st.cache_resource.clear()
         return None
     except Exception:
-        LOGGER.exception("Price Champion promotion failed")
+        LOGGER.exception("Champion selection failed for model_name=%s selected_version=%s", model_name, selected_version)
         if connection is not None and transaction_started:
             try:
                 connection.execute("rollback")
@@ -312,3 +324,7 @@ def set_price_champion(candidate_version: str, promoted_by: str = "streamlit") -
     finally:
         if connection is not None:
             close_connection(connection)
+
+
+def set_price_champion(selected_version: str, promoted_by: str = "streamlit") -> str | None:
+    return set_model_champion("price_model", selected_version, promoted_by)
